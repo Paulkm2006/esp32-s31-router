@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include "esp_random.h"
 #include "esp_timer.h"

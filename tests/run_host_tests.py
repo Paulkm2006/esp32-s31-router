@@ -32,9 +32,11 @@ def main() -> None:
     if compiler is None:
         raise SystemExit("Set CC to a C compiler; Windows also supports MSVC installed with Build Tools.")
     msvc = Path(compiler).name.lower() in {"cl", "cl.exe"}
-    includes = [IDF / "components/esp_common/include", IDF / "components/nvs_flash/include", ROOT / "build/config"]
+    includes = [ROOT / "tests/host", IDF / "components/esp_common/include",
+                IDF / "components/nvs_flash/include", ROOT / "build/config"]
     tests = {"subnet": [ROOT / "tests/test_subnet.c"],
-             "config": [ROOT / "tests/test_config.c", ROOT / "main/router_config.c"]}
+             "config": [ROOT / "tests/test_config.c", ROOT / "main/router_config.c"],
+             "auth": [ROOT / "tests/test_auth.c", ROOT / "main/router_auth.c"]}
     with tempfile.TemporaryDirectory(prefix="router-host-tests-") as temp:
         for name, sources in tests.items():
             output = Path(temp) / (name + (".exe" if os.name == "nt" else ""))
