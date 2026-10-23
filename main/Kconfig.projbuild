@@ -17,6 +17,13 @@ menu "Router Wi-Fi AP"
         range 1 11
         default 6
 
+    config ROUTER_ADMIN_PASSWORD
+        string "Initial router management password"
+        default "ChangeAdmin-S31!"
+        help
+            Management login password, from 8 to 63 bytes. Used only when no
+            valid configuration has been saved; change it before use.
+
     config ROUTER_AP_MAX_CLIENTS
         int "Maximum connected devices"
         range 1 10
