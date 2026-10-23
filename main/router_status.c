@@ -151,9 +151,14 @@ static bool add_clients(cJSON *array, const connection_t *connections, int64_t n
         memcpy(leases[i].mac, stations.sta[i].mac, 6);
     }
     if (esp_netif_dhcps_get_clients_by_mac(s_ap, stations.num, leases) != ESP_OK) {
-        return false;
+        for (int i = 0; i < stations.num; ++i) {
+            leases[i].ip.addr = 0;
+        }
     }
     for (int i = 0; i < stations.num; ++i) {
+        if (leases[i].ip.addr == 0 && esp_netif_arp_get_client_by_mac(s_ap, &leases[i]) != ESP_OK) {
+            leases[i].ip.addr = 0;
+        }
         cJSON *client = cJSON_CreateObject();
         if (client == NULL || !cJSON_AddItemToArray(array, client)) {
             cJSON_Delete(client);
@@ -170,7 +175,7 @@ static bool add_clients(cJSON *array, const connection_t *connections, int64_t n
         }
         cJSON *duration = seconds < 0 ? cJSON_AddNullToObject(client, "connected_seconds") :
                                        cJSON_AddNumberToObject(client, "connected_seconds", seconds);
-        // shortcut: DHCP leases cannot identify static addresses; add ARP discovery if needed.
+        // shortcut: static addresses remain unknown until learned in ARP; add active discovery if needed.
         if (duration == NULL || !add_ip(client, "ip", &leases[i].ip) ||
             cJSON_AddStringToObject(client, "mac", mac) == NULL) {
             return false;
