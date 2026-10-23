@@ -12,6 +12,8 @@
 #include "router_http.h"
 #include "router_status.h"
 
+_Static_assert(CONFIG_CJSON_NESTING_LIMIT <= 8, "Set cJSON maximum nesting depth to 8 or less");
+
 static esp_netif_t *s_ap;
 static esp_timer_handle_t reboot_timer;
 static bool rebooting;
@@ -26,6 +28,12 @@ static esp_err_t reply(httpd_req_t *req, const char *status, const char *body)
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
     return httpd_resp_sendstr(req, body);
+}
+
+static bool is_route(const httpd_req_t *req, const char *path)
+{
+    size_t size = strlen(path);
+    return strncmp(req->uri, path, size) == 0 && (req->uri[size] == '\0' || req->uri[size] == '?');
 }
 
 static bool valid_host(httpd_req_t *req)
@@ -111,14 +119,14 @@ static esp_err_t handle_request(httpd_req_t *req)
     if (!valid_host(req)) {
         return reply(req, "403 Forbidden", "{\"error\":\"请使用 AP 网关 IP 访问管理页面\"}");
     }
-    if (req->method == HTTP_GET && strcmp(req->uri, "/") == 0) {
+    if (req->method == HTTP_GET && is_route(req, "/")) {
         httpd_resp_set_type(req, "text/html; charset=utf-8");
         httpd_resp_set_hdr(req, "Cache-Control", "no-store");
         httpd_resp_set_hdr(req, "X-Frame-Options", "DENY");
         httpd_resp_set_hdr(req, "Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'");
         return httpd_resp_send(req, page_start, page_end - page_start - 1);
     }
-    bool login = strcmp(req->uri, "/api/login") == 0;
+    bool login = is_route(req, "/api/login");
     if (!login && !router_auth_check(req)) {
         return reply(req, "401 Unauthorized", "{\"error\":\"请先登录或重新登录\"}");
     }
@@ -146,7 +154,7 @@ static esp_err_t handle_request(httpd_req_t *req)
         esp_err_t auth = cJSON_IsString(password) ? router_auth_login(req, password->valuestring) : ESP_ERR_INVALID_ARG;
         result = reply(req, auth == ESP_OK ? "200 OK" : auth == ESP_ERR_INVALID_STATE ? "429 Too Many Requests" : "401 Unauthorized",
                        auth == ESP_OK ? "{}" : "{\"error\":\"密码错误或尝试过快，请稍后重试\"}");
-    } else if (strcmp(req->uri, "/api/logout") == 0) {
+    } else if (is_route(req, "/api/logout")) {
         router_auth_logout(req);
         result = reply(req, "200 OK", "{}");
     } else {
@@ -165,6 +173,7 @@ esp_err_t router_http_start(esp_netif_t *ap)
 {
     s_ap = ap;
     ESP_RETURN_ON_ERROR(esp_netif_get_netif_impl_name(ap, ap_interface.ifr_name), "router_http", "get AP interface");
+    ESP_RETURN_ON_FALSE(ap_interface.ifr_name[0] != '\0', ESP_ERR_INVALID_STATE, "router_http", "AP is not started");
     const esp_timer_create_args_t timer = {.callback = reboot, .name = "config_reboot"};
     ESP_RETURN_ON_ERROR(esp_timer_create(&timer, &reboot_timer), "router_http", "create reboot timer");
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
