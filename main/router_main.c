@@ -8,6 +8,9 @@
 #include "ethernet_init.h"
 #include "nvs_flash.h"
 #include "router_ap.h"
+#include "router_config.h"
+#include "router_http.h"
+#include "router_status.h"
 
 static const char *TAG = "router";
 static esp_netif_t *wan;
@@ -15,6 +18,7 @@ static esp_netif_t *ap;
 static bool wan_ready;
 static bool ap_ready;
 static bool napt_enabled;
+static bool http_started;
 
 static void update_forwarding(void)
 {
@@ -53,6 +57,10 @@ static void network_event(void *arg, esp_event_base_t base, int32_t id, void *da
     } else if (base == WIFI_EVENT) {
         if (id == WIFI_EVENT_AP_START || id == WIFI_EVENT_AP_STOP) {
             ap_ready = id == WIFI_EVENT_AP_START;
+            if (ap_ready && !http_started) {
+                ESP_ERROR_CHECK(router_http_start(ap));
+                http_started = true;
+            }
             update_forwarding();
         }
     } else if (base == IP_EVENT) {
@@ -82,6 +90,7 @@ static void network_event(void *arg, esp_event_base_t base, int32_t id, void *da
 void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(router_config_load());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
@@ -98,10 +107,11 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_set_hostname(wan, "esp32-s31-router"));
 
     ap = router_ap_init();
+    ESP_ERROR_CHECK(router_status_init(ap, wan, handles[0]));
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, network_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, network_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, network_event, NULL));
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_eth_start(handles[0]));
-    ESP_LOGI(TAG, "AP SSID: %s (WPA2-PSK)", CONFIG_ROUTER_AP_SSID);
+    ESP_LOGI(TAG, "AP SSID: %s (WPA2-PSK)", router_config_get()->ssid);
 }
