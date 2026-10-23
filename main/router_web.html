@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>路由器管理</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#16302f;background:#f3f6f5;font-synthesis:none;line-height:1.5}
+*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button,a,input{touch-action:manipulation}button{cursor:pointer;border:0;border-radius:9px;padding:11px 18px;font-weight:650;background:#087c70;color:#fff}button:hover{background:#05665d}button:disabled{opacity:.6;cursor:wait}button.secondary{background:#e9f1ef;color:#25564f}a{color:#087c70;overflow-wrap:anywhere}:focus-visible{outline:3px solid #e8a147;outline-offset:3px}[hidden]{display:none!important}
+header{background:#fff;border-bottom:1px solid #dce6e2}header>div{max-width:1080px;margin:auto;padding:22px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}.brand{display:flex;align-items:center;gap:12px}.logo{display:grid;place-items:center;width:42px;height:42px;background:#087c70;border-radius:12px;color:#fff;font-size:23px;font-weight:700}h1{font-size:20px;letter-spacing:.02em;margin:0}.eyebrow{font-size:11px;letter-spacing:.14em;color:#68807b;margin:0 0 2px}main{max-width:1080px;padding:30px 24px 48px;margin:auto}h2{font-size:18px;margin:0 0 18px}h3{font-size:15px;margin:0 0 12px}.muted,.hint{color:#647b76;font-size:13px}.hint{margin:6px 0 0}.card{border:1px solid #dce6e2;border-radius:16px;background:#fff;padding:24px;box-shadow:0 4px 18px #16302f04}.intro{margin-bottom:24px}.intro h2{font-size:26px;margin:0 0 4px}.intro p{margin:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}.card-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.card-title h2{margin:0}.badge{font-size:12px;padding:4px 10px;background:#eff3f2;border-radius:999px;color:#647b76;white-space:nowrap}.badge.good{background:#e2f4eb;color:#167247}.stats{display:grid;grid-template-columns:auto 1fr;gap:10px 20px;font-size:14px;margin:0}.stats dt{color:#647b76}.stats dd{margin:0;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:14px}th{text-align:left;font-size:12px;font-weight:500;color:#647b76;border-bottom:1px solid #e4ebe8;padding:0 16px 12px 0}td{padding:14px 16px 14px 0;border-bottom:1px solid #eef2f0;font-variant-numeric:tabular-nums}tr:last-child td{border-bottom:0}.empty{text-align:center;padding:24px;color:#647b76}.devices{margin-bottom:20px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:18px 24px}label{display:block;font-size:14px;font-weight:600;margin-bottom:7px}input{display:block;width:100%;min-width:0;border:1px solid #cbdad4;background:#fff;color:#16302f;border-radius:8px;padding:10px 12px}input::placeholder{color:#84958f}fieldset{border:0;padding:0;margin:0 0 24px}legend{padding:0;margin-bottom:14px;font-weight:650}.actions{display:flex;align-items:center;gap:16px;margin-top:24px}.actions p{margin:0}.login{max-width:420px;margin:7vh auto}.login p{margin:0 0 22px}.login button{width:100%;margin-top:20px}.error{color:#a7352b;font-size:14px;margin-top:14px!important}.notice{border:1px solid #b7d8cb;background:#edf8f2;border-radius:12px;padding:20px;margin-bottom:20px}.notice p{margin:6px 0}.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#203c36;color:#fff;padding:12px 20px;border-radius:10px;box-shadow:0 6px 24px #0002;max-width:calc(100% - 32px);width:max-content;font-size:14px;z-index:2}.refresh{display:flex;gap:8px;align-items:center}.dot{width:6px;height:6px;border-radius:50%;background:#469b78}
+@media(max-width:680px){header>div{padding:18px 20px}main{padding:24px 16px}.grid,.fields{grid-template-columns:1fr}.card{padding:20px}.intro h2{font-size:23px}.actions{align-items:flex-start;flex-direction:column}.login{margin:5vh auto}.refresh{font-size:12px}.brand{gap:9px}h1{font-size:18px}.stats{gap:10px 12px}}
+</style>
+</head>
+<body>
+<header><div><div class="brand"><span class="logo" aria-hidden="true">↗</span><div><p class="eyebrow">ESP32 ROUTER</p><h1>路由器管理</h1></div></div><button id="logout" class="secondary" hidden>退出登录</button></div></header>
+<main>
+<section id="login-panel" class="card login" aria-labelledby="login-title">
+<h2 id="login-title">登录管理页面</h2><p class="muted">连接路由器 Wi-Fi 后，使用管理密码登录。</p>
+<form id="login-form"><label for="login-password">管理密码</label><input id="login-password" type="password" autocomplete="current-password" required maxlength="63"><button id="login-submit" type="submit">登录</button><p id="login-error" class="error" role="alert" hidden></p></form>
+</section>
+<section id="dashboard" hidden aria-label="路由器控制台">
+<div class="intro"><h2>网络概况</h2><p class="muted refresh"><span class="dot" aria-hidden="true"></span><span id="refresh-state" role="status">每 5 秒自动更新</span></p></div>
+<section id="reconnect" class="notice" role="status" hidden><h3>配置已保存，即将重启</h3><p>重新连接 Wi-Fi：<strong id="new-ssid"></strong></p><p>连接后打开：<a id="new-url"></a></p><p class="hint">请使用新密码连接；管理密码如有修改，下次登录时生效。若与有线网络网段冲突，请以设备日志中的 AP 网关地址为准。</p></section>
+<div class="grid">
+<section class="card" aria-labelledby="wan-title"><div class="card-title"><h2 id="wan-title">有线网络</h2><span id="wan-state" class="badge">读取中</span></div><dl class="stats"><dt>IP 地址</dt><dd id="wan-ip">—</dd><dt>子网掩码</dt><dd id="wan-mask">—</dd><dt>网关</dt><dd id="wan-gateway">—</dd><dt>DNS</dt><dd id="wan-dns">—</dd><dt>MAC 地址</dt><dd id="wan-mac">—</dd><dt>链路速率</dt><dd id="wan-speed">—</dd></dl></section>
+<section class="card" aria-labelledby="ap-title"><div class="card-title"><h2 id="ap-title">无线接入点</h2><span class="badge good">AP</span></div><dl class="stats"><dt>网络名称</dt><dd id="ap-ssid">—</dd><dt>当前网关</dt><dd id="ap-ip">—</dd><dt>子网掩码</dt><dd id="ap-mask">—</dd><dt>DNS</dt><dd id="ap-dns">—</dd><dt>已连接设备</dt><dd id="client-count">0 台</dd></dl><p class="hint">以下表格显示当前连接的无线设备。</p></section>
+</div>
+<section class="card devices" aria-labelledby="devices-title"><div class="card-title"><h2 id="devices-title">已连接设备</h2><span class="muted">在线设备</span></div><div class="table-wrap"><table><thead><tr><th scope="col">IP 地址</th><th scope="col">MAC 地址</th><th scope="col">连接时长</th></tr></thead><tbody id="clients"></tbody></table></div></section>
+<section id="settings" class="card" aria-labelledby="settings-title"><h2 id="settings-title">网络设置</h2><form id="config-form">
+<fieldset><legend>Wi-Fi</legend><div class="fields"><div><label for="ssid">网络名称（SSID）</label><input id="ssid" name="ssid" required maxlength="32" autocomplete="off"><p class="hint">最多 32 个 UTF-8 字节。</p></div><div><label for="password">新的 Wi-Fi 密码</label><input id="password" name="password" type="password" maxlength="63" autocomplete="new-password" placeholder="留空保留当前密码"><p class="hint">8–63 字节；修改后需要重新连接。</p></div></div></fieldset>
+<fieldset><legend>AP 内网</legend><div class="fields"><div><label for="gateway">网关 IP 地址</label><input id="gateway" name="gateway" required inputmode="decimal" maxlength="15" placeholder="192.168.4.1" aria-describedby="gateway-hint"><p id="gateway-hint" class="hint">设置内网网段，例如 192.168.4.1。</p></div><div><label for="netmask">子网掩码</label><input id="netmask" name="netmask" required inputmode="decimal" maxlength="15" placeholder="255.255.255.0"></div><div><label for="dns">DNS 服务器</label><input id="dns" name="dns" inputmode="decimal" maxlength="15" placeholder="自动使用有线网络 DNS"><p class="hint">留空表示自动获取。</p></div></div></fieldset>
+<fieldset><legend>管理安全</legend><div class="fields"><div><label for="admin_password">新的管理密码</label><input id="admin_password" name="admin_password" type="password" maxlength="63" autocomplete="new-password" placeholder="留空保留当前密码"><p class="hint">8–63 字节，用于登录此页面。</p></div></div></fieldset>
+<div class="actions"><button id="save" type="submit">保存并重启</button><p class="muted">配置将持久保存。重启会暂时断开网络。</p></div><p id="config-error" class="error" role="alert" hidden></p>
+</form></section>
+</section>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const configKeys = ['ssid', 'password', 'gateway', 'netmask', 'dns', 'admin_password'];
+let timer, toastTimer, configLoaded = false, refreshing = null, rebooting = false, authVersion = 0;
+function message(id, text) { $(id).textContent = text; $(id).hidden = !text; }
+function toast(text) { message('toast', text); clearTimeout(toastTimer); toastTimer = setTimeout(() => message('toast', ''), 5000); }
+async function request(path, body) {
+  const options = {credentials:'same-origin', cache:'no-store'};
+  if (body !== undefined) Object.assign(options, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const response = await fetch(path, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) { const error = new Error(data.error || '请求失败，请稍后重试。'); error.status = response.status; throw error; }
+  return data;
+}
+function loginView() {
+  authVersion++; clearInterval(timer); timer = undefined; configLoaded = false;
+  $('login-panel').hidden = false; $('dashboard').hidden = true; $('logout').hidden = true;
+  $('login-password').value = ''; $('password').value = ''; $('admin_password').value = '';
+}
+function duration(seconds) {
+  if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return '暂不可用';
+  const n = Math.floor(seconds), days = Math.floor(n / 86400), hours = Math.floor(n / 3600) % 24, minutes = Math.floor(n / 60) % 60;
+  return (days ? days + ' 天 ' : '') + (hours ? hours + ' 小时 ' : '') + (minutes ? minutes + ' 分 ' : '') + n % 60 + ' 秒';
+}
+function render(data) {
+  const {wan, ap, clients, config} = data;
+  const values = {'wan-ip':wan.ip, 'wan-mask':wan.netmask, 'wan-gateway':wan.gateway, 'wan-dns':wan.dns, 'wan-mac':wan.mac, 'ap-ssid':config.ssid, 'ap-ip':ap.ip, 'ap-mask':ap.netmask, 'ap-dns':ap.dns};
+  for (const [id, value] of Object.entries(values)) $(id).textContent = value || '暂不可用';
+  $('wan-state').textContent = wan.ready ? '已获取 IP' : wan.link ? '网线已连接 · 等待 IP' : '网线未连接';
+  $('wan-state').className = 'badge' + (wan.ready ? ' good' : '');
+  $('wan-speed').textContent = wan.link && wan.speed_mbps ? wan.speed_mbps + ' Mbps · ' + (wan.full_duplex ? '全双工' : '半双工') : '—';
+  $('client-count').textContent = clients.length + ' 台';
+  $('clients').replaceChildren();
+  for (const client of clients) {
+    const row = document.createElement('tr');
+    for (const value of [client.ip || '暂未分配', client.mac || '暂不可用', duration(client.connected_seconds)]) { const cell = document.createElement('td'); cell.textContent = value; row.append(cell); }
+    $('clients').append(row);
+  }
+  if (!clients.length) { const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 3; cell.className = 'empty'; cell.textContent = '暂无设备连接'; row.append(cell); $('clients').append(row); }
+  if (!configLoaded) { for (const key of ['ssid', 'gateway', 'netmask', 'dns']) $(key).value = config[key] || ''; configLoaded = true; }
+}
+async function refresh() {
+  if (refreshing === authVersion || rebooting) return;
+  const version = authVersion; refreshing = version;
+  try {
+    const data = await request('/api/status');
+    if (version !== authVersion) return;
+    render(data); $('login-panel').hidden = true; $('dashboard').hidden = false; $('logout').hidden = false;
+    $('refresh-state').textContent = '每 5 秒自动更新';
+    if (!timer) timer = setInterval(refresh, 5000);
+  } catch (error) {
+    if (version !== authVersion) return;
+    if (error.status === 401) loginView();
+    else if (!$('dashboard').hidden) $('refresh-state').textContent = '更新失败，正在重试…';
+    else message('login-error', '无法连接路由器，请检查网络后重试。');
+  } finally { if (refreshing === version) refreshing = null; }
+}
+$('login-form').addEventListener('submit', async event => {
+  event.preventDefault(); $('login-submit').disabled = true; message('login-error', '');
+  try { await request('/api/login', {password:$('login-password').value}); authVersion++; $('login-password').value = ''; await refresh(); }
+  catch (error) { message('login-error', error.message); }
+  finally { $('login-submit').disabled = false; }
+});
+$('logout').addEventListener('click', async () => {
+  $('logout').disabled = true;
+  try { await request('/api/logout', {}); loginView(); }
+  catch (error) { if (error.status === 401) loginView(); else toast(error.message); }
+  finally { $('logout').disabled = false; }
+});
+$('config-form').addEventListener('submit', async event => {
+  event.preventDefault(); message('config-error', '');
+  const body = Object.fromEntries(configKeys.map(key => [key, $(key).value]));
+  for (const key of ['ssid', 'password', 'admin_password']) {
+    const size = new TextEncoder().encode(body[key]).length, max = key === 'ssid' ? 32 : 63;
+    if (size > max || (key !== 'ssid' && size > 0 && size < 8)) { message('config-error', key === 'ssid' ? '网络名称不能超过 32 个 UTF-8 字节。' : '密码必须为 8–63 个 UTF-8 字节。'); return; }
+  }
+  $('save').disabled = true;
+  try {
+    const data = await request('/api/config', body);
+    rebooting = true; authVersion++; clearInterval(timer); $('settings').hidden = true; $('logout').hidden = true;
+    $('refresh-state').textContent = '等待路由器重启，请重新连接 Wi-Fi';
+    $('new-ssid').textContent = body.ssid;
+    const url = 'http://' + data.gateway + '/'; $('new-url').textContent = url; $('new-url').setAttribute('href', url);
+    $('reconnect').hidden = false; $('password').value = ''; $('admin_password').value = '';
+    $('reconnect').scrollIntoView({behavior:'smooth', block:'start'});
+  } catch (error) { if (error.status === 401) { loginView(); message('login-error', '登录已过期，请重新登录。'); } else message('config-error', error.message); }
+  finally { $('save').disabled = false; }
+});
+refresh();
+</script>
+</body>
+</html>
