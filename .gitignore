@@ -38,6 +38,8 @@ sdkconfig
 **/components/.idf/
 # For modern ESP-IDF component manager
 managed_components/
+.cache/
+.pytest_cache/
 # If ESP-IDF tools are installed/referenced locally to the project
 .espressif/
 
