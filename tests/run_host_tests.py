@@ -45,7 +45,8 @@ def main() -> None:
                         f"/FI{ROOT / 'tests/host/compiler.h'}", f"/Fe:{output}",
                         *[f"/I{path}" for path in includes]]
             else:
-                args = ["-std=c17", "-Wall", "-Wextra", "-Werror", "-include", str(ROOT / "tests/host/compiler.h"),
+                args = ["-std=c17", "-Wall", "-Wextra", "-Werror", "-D_POSIX_C_SOURCE=200809L",
+                        "-include", str(ROOT / "tests/host/compiler.h"),
                         "-o", str(output), *[f"-I{path}" for path in includes]]
             subprocess.run([compiler, *args, *map(str, sources)], env=env, cwd=temp, check=True)
             subprocess.run([str(output)], cwd=temp, check=True)

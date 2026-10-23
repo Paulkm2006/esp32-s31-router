@@ -86,10 +86,16 @@ int main(void)
     CHECK(!router_config_valid(&config));
     config = *router_config_get();
     strcpy(config.ssid, "Saved router");
+    strcpy(config.password, "Saved-AP-Password!");
+    strcpy(config.admin_password, "Saved-Admin-Password!");
+    strcpy(config.gateway, "10.8.0.1");
+    strcpy(config.netmask, "255.255.0.0");
+    strcpy(config.dns, "9.9.9.9");
     CHECK(router_config_save(&config) == ESP_OK);
     CHECK(strcmp(router_config_get()->ssid, config.ssid) != 0);
     CHECK(router_config_load() == ESP_OK);
     CHECK(strcmp(router_config_get()->ssid, config.ssid) == 0);
+    CHECK(memcmp(router_config_get(), &config, sizeof(config)) == 0);
     commit_result = ESP_FAIL;
     strcpy(config.ssid, "Failed write");
     CHECK(router_config_save(&config) == ESP_FAIL);
