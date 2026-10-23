@@ -114,3 +114,119 @@ esp_err_t router_status_init(esp_netif_t *ap, esp_netif_t *wan, esp_eth_handle_t
     }
     return err;
 }
+
+static bool add_ip(cJSON *object, const char *key, const esp_ip4_addr_t *ip)
+{
+    char address[16] = "";
+    if (ip->addr != 0) {
+        snprintf(address, sizeof(address), IPSTR, IP2STR(ip));
+    }
+    return cJSON_AddStringToObject(object, key, address) != NULL;
+}
+
+static bool add_netif(cJSON *object, esp_netif_t *netif, bool gateway)
+{
+    esp_netif_ip_info_t info = {0};
+    esp_netif_dns_info_t dns = {0};
+    if (esp_netif_get_ip_info(netif, &info) != ESP_OK ||
+        esp_netif_get_dns_info(netif, ESP_NETIF_DNS_MAIN, &dns) != ESP_OK) {
+        return false;
+    }
+    esp_ip4_addr_t dns_ip = {0};
+    if (dns.ip.type == ESP_IPADDR_TYPE_V4) {
+        dns_ip = dns.ip.u_addr.ip4;
+    }
+    return add_ip(object, "ip", &info.ip) && add_ip(object, "netmask", &info.netmask) &&
+           add_ip(object, "dns", &dns_ip) && (!gateway || add_ip(object, "gateway", &info.gw));
+}
+
+static bool add_clients(cJSON *array, const connection_t *connections, int64_t now)
+{
+    wifi_sta_list_t stations = {0};
+    if (esp_wifi_ap_get_sta_list(&stations) != ESP_OK) {
+        return false;
+    }
+    esp_netif_pair_mac_ip_t leases[ESP_WIFI_MAX_CONN_NUM] = {0};
+    for (int i = 0; i < stations.num; ++i) {
+        memcpy(leases[i].mac, stations.sta[i].mac, 6);
+    }
+    if (esp_netif_dhcps_get_clients_by_mac(s_ap, stations.num, leases) != ESP_OK) {
+        return false;
+    }
+    for (int i = 0; i < stations.num; ++i) {
+        cJSON *client = cJSON_CreateObject();
+        if (client == NULL || !cJSON_AddItemToArray(array, client)) {
+            cJSON_Delete(client);
+            return false;
+        }
+        char mac[18];
+        snprintf(mac, sizeof(mac), MACSTR, MAC2STR(stations.sta[i].mac));
+        int64_t seconds = -1;
+        for (int j = 0; j < ESP_WIFI_MAX_CONN_NUM; ++j) {
+            if (connections[j].connected && memcmp(connections[j].mac, stations.sta[i].mac, 6) == 0) {
+                seconds = (now - connections[j].since) / 1000000;
+                break;
+            }
+        }
+        cJSON *duration = seconds < 0 ? cJSON_AddNullToObject(client, "connected_seconds") :
+                                       cJSON_AddNumberToObject(client, "connected_seconds", seconds);
+        // shortcut: DHCP leases cannot identify static addresses; add ARP discovery if needed.
+        if (duration == NULL || !add_ip(client, "ip", &leases[i].ip) ||
+            cJSON_AddStringToObject(client, "mac", mac) == NULL) {
+            return false;
+        }
+    }
+    return true;
+}
+
+cJSON *router_status_json(void)
+{
+    if (s_ap == NULL) {
+        return NULL;
+    }
+    connection_t clients[ESP_WIFI_MAX_CONN_NUM];
+    bool link, ready;
+    portENTER_CRITICAL(&s_lock);
+    memcpy(clients, s_clients, sizeof(clients));
+    link = s_link;
+    ready = s_ready && link;
+    portEXIT_CRITICAL(&s_lock);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *wan = cJSON_AddObjectToObject(root, "wan");
+    cJSON *ap = cJSON_AddObjectToObject(root, "ap");
+    cJSON *config = cJSON_AddObjectToObject(root, "config");
+    cJSON *devices = cJSON_AddArrayToObject(root, "clients");
+    const router_config_t *saved = router_config_get();
+    uint8_t mac[6] = {0};
+    char mac_string[18];
+    eth_speed_t speed = ETH_SPEED_10M;
+    eth_duplex_t duplex = ETH_DUPLEX_HALF;
+    int speed_mbps = 0;
+    if (link && esp_eth_ioctl(s_eth, ETH_CMD_G_SPEED, &speed) == ESP_OK) {
+        speed_mbps = speed == ETH_SPEED_1000M ? 1000 : speed == ETH_SPEED_100M ? 100 : 10;
+    }
+    bool full_duplex = link && esp_eth_ioctl(s_eth, ETH_CMD_G_DUPLEX_MODE, &duplex) == ESP_OK &&
+                       duplex == ETH_DUPLEX_FULL;
+    if (esp_netif_get_mac(s_wan, mac) != ESP_OK) {
+        cJSON_Delete(root);
+        return NULL;
+    }
+    snprintf(mac_string, sizeof(mac_string), MACSTR, MAC2STR(mac));
+    if (root == NULL || wan == NULL || ap == NULL || config == NULL || devices == NULL ||
+        !add_netif(wan, s_wan, true) || !add_netif(ap, s_ap, false) ||
+        cJSON_AddBoolToObject(wan, "link", link) == NULL ||
+        cJSON_AddBoolToObject(wan, "ready", ready) == NULL ||
+        cJSON_AddStringToObject(wan, "mac", mac_string) == NULL ||
+        cJSON_AddNumberToObject(wan, "speed_mbps", speed_mbps) == NULL ||
+        cJSON_AddBoolToObject(wan, "full_duplex", full_duplex) == NULL ||
+        cJSON_AddStringToObject(config, "ssid", saved->ssid) == NULL ||
+        cJSON_AddStringToObject(config, "gateway", saved->gateway) == NULL ||
+        cJSON_AddStringToObject(config, "netmask", saved->netmask) == NULL ||
+        cJSON_AddStringToObject(config, "dns", saved->dns) == NULL ||
+        !add_clients(devices, clients, esp_timer_get_time())) {
+        cJSON_Delete(root);
+        return NULL;
+    }
+    return root;
+}

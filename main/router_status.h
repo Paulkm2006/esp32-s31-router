@@ -7,4 +7,5 @@
 
 // Register before starting Wi-Fi and Ethernet so connection durations are complete.
 esp_err_t router_status_init(esp_netif_t *ap, esp_netif_t *wan, esp_eth_handle_t eth);
+// Caller owns the result; NULL indicates a failed snapshot or allocation.
 cJSON *router_status_json(void);
