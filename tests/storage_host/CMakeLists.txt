@@ -15,15 +15,15 @@ foreach(name ff.c ff.h ffunicode.c diskio.h)
 endforeach()
 configure_file(ffconf.h "${FAT}/ffconf.h" COPYONLY)
 foreach(name esp_netif.h esp_err.h esp_heap_caps.h esp_log.h esp_random.h
-        freertos/FreeRTOS.h freertos/semphr.h freertos/task.h usb/msc_host.h)
+        freertos/FreeRTOS.h freertos/semphr.h freertos/task.h usb/msc_host.h diskio_impl.h diskio_bdl.h)
     get_filename_component(dir "${CMAKE_BINARY_DIR}/shims/${name}" DIRECTORY)
     file(MAKE_DIRECTORY "${dir}")
     file(WRITE "${CMAKE_BINARY_DIR}/shims/${name}" "#include \"compat.h\"\n")
 endforeach()
 add_executable(router_smb_host server.c "${FAT}/ff.c" "${FAT}/ffunicode.c"
-    "${ROOT}/main/router_smb_files.c" "${ROOT}/main/router_smb_info.c" "${ROOT}/main/router_smb_dir.c")
+    "${ROOT}/main/router_disk.c" "${ROOT}/main/router_smb_files.c" "${ROOT}/main/router_smb_info.c" "${ROOT}/main/router_smb_dir.c")
 target_include_directories(router_smb_host PRIVATE . "${CMAKE_BINARY_DIR}/shims" "${FAT}"
     "${ROOT}/third_party/libsmb2/include" "${ROOT}/third_party/libsmb2/include/smb2")
-target_compile_options(router_smb_host PRIVATE -ffunction-sections -fdata-sections -Wall -Wextra)
+target_compile_options(router_smb_host PRIVATE -include stddef.h -ffunction-sections -fdata-sections -Wall -Wextra)
 target_link_options(router_smb_host PRIVATE -Wl,--gc-sections)
 target_link_libraries(router_smb_host PRIVATE smb2)

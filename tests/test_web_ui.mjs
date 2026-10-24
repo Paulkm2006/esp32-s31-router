@@ -42,6 +42,9 @@ const status = {
   ap:{ip:'192.168.4.1', netmask:'255.255.255.0', dns:'1.1.1.1'},
   clients:[{ip:'', mac:'11:22:33:44:55:66', connected_seconds:61}],
   config:{ssid:'<img src=x onerror=alert(1)>', gateway:'192.168.5.1', netmask:'255.255.255.0', dns:''},
+  storage:{ready:true, connected:true, mounted:true, busy:false, media:7, capacity:1073741824,
+    total:1000000000, free:400000000, share:'usb', enabled:false, username:'router', password_set:false,
+    smb_running:false, psram_total:16777216, psram_free:12000000, error:''},
 };
 handleRequest = path => ({status:200, data:path === '/api/status' ? status : {}});
 const submit = id => $(id).listeners.submit({preventDefault() {}});
@@ -59,6 +62,10 @@ assert.equal($('ap-ip').textContent, '192.168.4.1');
 assert.equal($('gateway').value, '192.168.5.1');
 assert.equal($('clients').children[0].children[0].textContent, '暂未分配');
 assert.equal($('clients').children[0].children[2].textContent, '1 分 1 秒');
+assert.equal($('storage-address').textContent, '\\\\192.168.4.1\\usb');
+assert.equal($('storage-mount').disabled, true);
+assert.equal($('storage-unmount').disabled, false);
+assert.equal($('smb-password').value, '');
 $('ssid').value = 'unsaved edit';
 await vm.runInContext('refresh()', context);
 assert.equal($('ssid').value, 'unsaved edit', 'Polling must preserve unsaved settings.');
@@ -96,6 +103,42 @@ assert.equal($('config-error').textContent, '网关地址无效。');
 assert.equal($('settings').hidden, false);
 assert.equal($('save').disabled, false);
 
+handleRequest = path => ({status:200, data:path === '/api/status' ? status : {accepted:true}});
+const storageBefore = requests.length;
+await submit('storage-format-form');
+assert.equal(requests.length, storageBefore, 'Formatting needs an explicit confirmation.');
+assert.match($('storage-error').textContent, /FORMAT/);
+$('storage-confirm').value = 'FORMAT';
+await submit('storage-format-form');
+let storagePost = requests.filter(r => r.path === '/api/storage').at(-1);
+assert.deepEqual(JSON.parse(storagePost.options.body), {action:'format', media:7, confirm:'FORMAT'});
+assert.equal($('storage-confirm').value, '');
+$('storage-confirm').value = 'FORMAT'; status.storage.media = 8;
+await vm.runInContext('refresh()', context);
+assert.equal($('storage-confirm').value, '', 'Replacing the disk invalidates format confirmation.');
+$('smb-enabled').checked = true; $('smb-password').value = 'short';
+const beforeBadSmb = requests.length;
+await submit('smb-form');
+assert.equal(requests.length, beforeBadSmb);
+$('smb-password').value = '独立共享密码';
+await submit('smb-form');
+storagePost = requests.filter(r => r.path === '/api/storage').at(-1);
+assert.deepEqual(JSON.parse(storagePost.options.body), {action:'configure', enabled:true, share:'usb', username:'router', password:'独立共享密码'});
+assert.equal($('smb-password').value, '');
+$('smb-username').value = 'unsaved-user';
+await vm.runInContext('refresh()', context);
+assert.equal($('smb-username').value, 'unsaved-user');
+status.storage.busy = true;
+await vm.runInContext('refresh()', context);
+assert.equal($('storage-format').disabled, true);
+assert.equal($('smb-save').disabled, true);
+status.storage.busy = false;
+await vm.runInContext('refresh()', context);
+handleRequest = path => path === '/api/storage' ? {status:409, data:{error:'磁盘已经改变。'}} : {status:200, data:status};
+await $('storage-unmount').listeners.click();
+assert.equal($('storage-error').textContent, '磁盘已经改变。');
+assert.equal($('storage-unmount').disabled, false);
+
 let resolveStatus;
 handleRequest = path => path === '/api/status' ? new Promise(resolve => { resolveStatus = resolve; }) : {status:200, data:{rebooting:true, gateway:'192.168.5.1'}};
 const staleRefresh = vm.runInContext('refresh()', context);
@@ -105,6 +148,7 @@ assert.equal($('reconnect').hidden, false);
 assert.equal($('new-ssid').textContent, '新网络');
 assert.equal($('new-url').attributes.href, 'http://192.168.5.1/');
 assert.equal($('settings').hidden, true);
+assert.equal($('storage-panel').hidden, true);
 assert.equal($('password').value, '');
 assert.equal(intervals.size, 0);
 resolveStatus({status:200, data:status}); await staleRefresh;

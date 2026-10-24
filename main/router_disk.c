@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include <stdlib.h>
+#include "ff.h"
+#include "diskio.h"
 #include "diskio_impl.h"
 #include "diskio_bdl.h"
 #include "router_disk.h"

@@ -104,7 +104,7 @@ function bytes(value) {
 }
 function renderStorage(storage, gateway) {
   if (storageState && storage && storageState.media !== storage.media) $('storage-confirm').value = '';
-  storageState = storage || {ready:false, connected:false, mounted:false, busy:false};
+  storageState = storage ? {...storage} : {ready:false, connected:false, mounted:false, busy:false};
   const s = storageState;
   const blocked = !s.ready || s.busy || storageSubmitting || storagePending;
   $('storage-state').textContent = s.busy || storagePending ? '正在操作' : !s.ready ? '存储未就绪' : s.mounted ? 'FAT32 已挂载' : s.connected ? '磁盘未挂载' : '未连接磁盘';

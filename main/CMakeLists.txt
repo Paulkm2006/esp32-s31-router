@@ -6,3 +6,5 @@ idf_component_register(SRCS "router_main.c" "router_ap.c" "router_config.c"
                                      esp_http_server esp_timer smb3 fatfs esp_psram
                        INCLUDE_DIRS "."
                        EMBED_TXTFILES "router_web.html")
+idf_component_get_property(fatfs_lib fatfs COMPONENT_LIB)
+target_compile_options(${fatfs_lib} PUBLIC -include "${CMAKE_CURRENT_LIST_DIR}/router_fatfs_config.h")

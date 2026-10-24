@@ -268,8 +268,11 @@ static int set_info(struct smb2_server *s, struct smb2_context *smb, struct smb2
             if (result == FR_OK) result = f_sync(&f->file);
         }
     } else if (req->file_info_class == SMB2_FILE_BASIC_INFORMATION && req->buffer_length >= 40) {
+        if (!f->directory && f->writable) result = f_sync(&f->file);
+        uint32_t attributes = router_smb_get(p + 32, 4);
+        if (result == FR_OK && attributes) result = f_chmod(f->path, attributes, AM_RDO | AM_HID | AM_SYS | AM_ARC);
         uint64_t raw = router_smb_get(p + 16, 8);
-        if (raw && raw != UINT64_MAX) {
+        if (result == FR_OK && raw && raw != UINT64_MAX) {
             struct smb2_timeval t;
             smb2_win_to_timeval(raw, &t);
             time_t seconds = t.tv_sec;

@@ -17,7 +17,7 @@
 #define FF_USE_LFN 3
 #define FF_MAX_LFN 255
 #define FF_LFN_UNICODE 2
-#define FF_LFN_BUF 255
+#define FF_LFN_BUF (FF_MAX_LFN * 3)
 #define FF_SFN_BUF 12
 #define FF_FS_RPATH 0
 #define FF_PATH_DEPTH 10
