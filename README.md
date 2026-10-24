@@ -9,6 +9,7 @@
 使用支持 esp32s31 预览目标的 ESP-IDF 6.1 环境。先打开 ESP-IDF PowerShell/终端，然后执行：
 
     cd D:\esp32-router
+    git submodule update --init --recursive
     idf.py --preview set-target esp32s31
     idf.py menuconfig
     idf.py build
@@ -98,7 +99,74 @@ PHY 使用板载晶振，PHY_REF_CLK 为 -1，PHY 地址自动探测。保留原
 - 拔网线或 WAN 丢失 IP 时关闭 NAPT，保留热点和本地 DHCP；重新取得 WAN 地址后恢复。
 - 仅 DNS 改变而 IP/网关/掩码均不变的 DHCP 续租不会触发 IDF GOT_IP 事件；此时重新插拔网线或重启板子以同步 DNS。
 - NAPT 不提供入站防火墙；能添加到 LAN 子网路由的上游设备仍可主动访问热点客户端。
-- 当前提供 IPv4 NAT、IPv6 透传和管理网页；未实现 OTA。NVS 初始化失败会报错，不会自动擦除已有 NVS。
+- 当前提供 IPv4 NAT、IPv6 透传、USB 存储及管理网页；未实现 OTA。NVS 初始化失败会报错，不会自动擦除已有 NVS。
+
+## USB 网络存储
+
+将 U 盘接到板上的 USB Type-A Host 口。默认开启 PSRAM（100 MHz）、UTF-8 长文件名与
+4 MiB 应用分区；Flash 中原有 NVS 和 PHY 分区的地址保持不变。已有 sdkconfig 需要在
+menuconfig 中同步开启 PSRAM、选择自定义分区表 partitions.csv，并启用 FatFs 的
+堆分配长文件名、UTF-8 编码、4096 字节最大扇区及 16 个文件锁。不要使用未跟踪的旧分区文件。
+
+存储支持一个 USB MSC 设备、一个 FAT32 卷，SMB 服务仅在 Wi-Fi AP 接口提供。
+它接受 SMB3 协议，要求账号认证与签名，不提供匿名访问或 SMB1/SMB2 降级。
+最多两个 SMB 连接，每个连接最多八个文件或目录句柄，读写块最大 32 KiB。
+SMB 缓冲与句柄放在 PSRAM 中；未检测到 PSRAM 时存储服务无法启动。
+
+登录管理页面后，在“USB 网络存储”中操作：
+
+1. 查看磁盘容量、FAT32 已用/可用空间、共享地址、服务状态和 PSRAM 占用。
+2. 设置共享开关、共享名称、SMB 用户名和密码，再点击“保存共享设置”。首次启用必须设置密码；
+   密码留空保留原值。设置独立保存在 NVS，保存会断开 SMB 客户端，不重启路由器。
+3. 插盘后自动尝试挂载 FAT32。安全卸载后可点“挂载”恢复使用，也可拔插磁盘。
+4. 拔盘前点击“安全卸载”，等待页面显示未挂载。设备会先停止共享、关闭文件并同步磁盘；
+   同步失败时拒绝卸载并显示错误。
+5. 格式化需输入 `FORMAT`。此操作会停止 SMB、卸载卷、清空整个磁盘的分区表并创建一个 FAT32 分区，
+   完成后挂载并按保存的设置恢复共享。确认绑定当前磁盘，换盘后需要重新确认。
+
+挂载失败不会自动格式化；非 FAT32、损坏或未格式化的磁盘会显示错误，等待管理员处理。
+格式化运行于后台，期间不要断电或拔盘。通过网络设置页面重启前也会先安全卸载。
+FAT32 单文件最大 4 GiB − 1 字节，不支持 POSIX 权限、符号链接或 ACL。
+当前未实现 SMB 字节范围锁和覆盖目标文件的原子重命名；已有文件可直接覆盖写入，
+替换式重命名会返回冲突。适合一般文件传输，不适合要求这些语义的数据库或虚拟机磁盘。
+SMB 密码不会通过状态接口返回；当前管理页面使用 HTTP，NVS 未启用加密，仍应在可信 Wi-Fi 中管理。
+
+Windows：连接热点后，将页面显示的地址（例如 `\\192.168.4.1\usb`）输入文件资源管理器，
+或使用“映射网络驱动器”，输入刚设置的 SMB 用户名和密码。更换账号后需要断开原共享连接，
+并更新 Windows 保存的凭据。服务不提供共享自动发现，请直接使用页面显示的共享路径。
+
+Linux：安装发行版的 cifs-utils，创建挂载目录后执行，例如：
+
+    sudo mount -t cifs //192.168.4.1/usb /mnt/esp32 -o username=router,vers=3.1.1,sec=ntlmssp,sign,noserverino
+
+请按页面实际网关、共享名称和用户名替换示例值；命令会提示输入密码。
+`noserverino` 避免依赖 FAT32 重命名前后不保证稳定的文件编号。
+在电脑上卸载共享后，仍需在管理页面执行设备端“安全卸载”再拔 U 盘。
+
+Type-A 口限流 500 mA；高功耗 SSD/移动硬盘应使用独立供电设备。
+USB 链路标称 480 Mbps 不代表文件传输速度；吞吐与路由延迟需实板并发测试。
+
+### SMB/FAT32 宿主集成测试
+
+Linux 环境中先准备 Python 虚拟环境并安装 smbprotocol 1.17.0，然后执行：
+
+    cmake -S tests/storage_host -B .cache/smb-host -DIDF_PATH=/path/to/esp-idf
+    cmake --build .cache/smb-host -j
+    python tests/run_smb_tests.py
+
+测试在端口 1445 启动临时服务，复用生产认证、文件处理和磁盘生命周期代码；仅替代 USB 块设备，
+使用临时 64 MiB 磁盘镜像和真实 FatFs。覆盖错误密码、SMB3 签名、SMB2 拒绝、长中文文件名、
+读写、零填充、截断、重命名、分页枚举及删除，同时验证挂载失败不擦盘、同步失败不卸载。
+它不替代实板 USB 热插拔、Windows 文件资源管理器、Linux 内核 CIFS 挂载或并发路由性能验收。
+
+内存检查可在配置命令中追加
+`-DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"`，重建后运行：
+
+    ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 python tests/run_smb_tests.py
+
+libsmb2 以固定版本 Git 子模块保存。components/smb3/patch_sources.cmake 在构建目录生成修复后的源码，
+修复自定义响应导致的请求生命周期问题、CREATE 名称泄漏、空密钥派生和未对齐 UTF-16 读取；
+宿主和固件使用同一份修复，不修改第三方检出。更新子模块时需要复跑上述内存检查。
 
 ## IPv6 透传
 
