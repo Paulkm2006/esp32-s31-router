@@ -11,6 +11,7 @@
 #include "router_config.h"
 #include "router_http.h"
 #include "router_ipv6.h"
+#include "router_log.h"
 #include "router_status.h"
 #include "router_storage.h"
 
@@ -93,6 +94,7 @@ static void network_event(void *arg, esp_event_base_t base, int32_t id, void *da
 
 void app_main(void)
 {
+    if (router_log_start() != ESP_OK) ESP_LOGW(TAG, "Web log cache unavailable (requires 2 MiB PSRAM)");
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(router_config_load());
     ESP_ERROR_CHECK(esp_netif_init());
