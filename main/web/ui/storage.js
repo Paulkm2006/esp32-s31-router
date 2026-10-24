@@ -1,3 +1,4 @@
+let storageLoaded = false, storageState = null, storageSubmitting = false, storagePending = false;
 function bytes(value) {
   if (!Number.isFinite(value) || value < 0) return '—';
   let n = value, unit = 0; const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];

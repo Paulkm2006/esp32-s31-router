@@ -19,100 +19,20 @@
 <section id="dashboard" hidden aria-label="路由器控制台">
 <div class="intro"><h2>网络概况</h2><p class="muted refresh"><span class="dot" aria-hidden="true"></span><span id="refresh-state" role="status">每 5 秒自动更新</span></p></div>
 <section id="reconnect" class="notice" role="status" hidden><h3>配置已保存，即将重启</h3><p>重新连接 Wi-Fi：<strong id="new-ssid"></strong></p><p>连接后打开：<a id="new-url"></a></p><p class="hint">请使用新密码连接；管理密码如有修改，下次登录时生效。若与有线网络网段冲突，请以设备日志中的 AP 网关地址为准。</p></section>
-<div class="grid">
-<section class="card" aria-labelledby="wan-title"><div class="card-title"><h2 id="wan-title">有线网络</h2><span id="wan-state" class="badge">读取中</span></div><dl class="stats"><dt>IP 地址</dt><dd id="wan-ip">—</dd><dt>子网掩码</dt><dd id="wan-mask">—</dd><dt>网关</dt><dd id="wan-gateway">—</dd><dt>DNS</dt><dd id="wan-dns">—</dd><dt>MAC 地址</dt><dd id="wan-mac">—</dd><dt>链路速率</dt><dd id="wan-speed">—</dd></dl></section>
-<section class="card" aria-labelledby="ap-title"><div class="card-title"><h2 id="ap-title">无线接入点</h2><span class="badge good">AP</span></div><dl class="stats"><dt>网络名称</dt><dd id="ap-ssid">—</dd><dt>当前网关</dt><dd id="ap-ip">—</dd><dt>子网掩码</dt><dd id="ap-mask">—</dd><dt>DNS</dt><dd id="ap-dns">—</dd><dt>已连接设备</dt><dd id="client-count">0 台</dd></dl><p class="hint">以下表格显示当前连接的无线设备。</p></section>
-</div>
-<section class="card devices" aria-labelledby="devices-title"><div class="card-title"><h2 id="devices-title">已连接设备</h2><span class="muted">在线设备</span></div><div class="table-wrap"><table><thead><tr><th scope="col">IP 地址</th><th scope="col">MAC 地址</th><th scope="col">连接时长</th></tr></thead><tbody id="clients"></tbody></table></div></section>
-<section id="storage-panel" class="card devices" aria-labelledby="storage-title">
-<div class="card-title"><h2 id="storage-title">USB 网络存储</h2><span id="storage-state" class="badge">读取中</span></div>
-<dl class="stats"><dt>磁盘容量</dt><dd id="storage-capacity">—</dd><dt>已用 / 可用空间</dt><dd id="storage-usage">—</dd><dt>共享地址</dt><dd id="storage-address">—</dd><dt>SMB 服务</dt><dd id="smb-state">—</dd><dt>PSRAM 可用 / 总量</dt><dd id="storage-psram">—</dd></dl>
-<p class="hint">仅支持 FAT32，单文件最大 4 GiB − 1 字节。拔盘前请先安全卸载。</p>
-<div class="actions"><button id="storage-mount" class="secondary" type="button">挂载</button><button id="storage-unmount" class="secondary" type="button">安全卸载</button></div>
-<form id="smb-form" style="margin-top:24px"><fieldset><legend>SMB3 共享设置</legend><div class="fields">
-<div><label for="smb-enabled">共享开关</label><input id="smb-enabled" type="checkbox" style="width:auto" aria-describedby="smb-hint"><p id="smb-hint" class="hint">开启后需要账号密码；保存会断开已有 SMB 连接。</p></div>
-<div><label for="smb-share">共享名称</label><input id="smb-share" required maxlength="32" pattern="[A-Za-z0-9_-]+" autocomplete="off"></div>
-<div><label for="smb-username">SMB 用户名</label><input id="smb-username" maxlength="32" pattern="[A-Za-z0-9_.-]*" autocomplete="username"></div>
-<div><label for="smb-password">新的 SMB 密码</label><input id="smb-password" type="password" maxlength="63" autocomplete="new-password" placeholder="留空保留当前密码"><p class="hint">8–63 个 UTF-8 字节，与管理密码独立。</p></div>
-</div></fieldset><button id="smb-save" type="submit">保存共享设置</button></form>
-<form id="storage-format-form" style="margin-top:24px"><fieldset><legend>格式化磁盘</legend><p class="error">将清空当前 USB 磁盘的全部分区和文件，创建一个 FAT32 分区，无法撤销。</p><label for="storage-confirm">输入 FORMAT 确认清空上方显示的磁盘</label><input id="storage-confirm" autocomplete="off" placeholder="FORMAT" maxlength="6"><div class="actions"><button id="storage-format" class="secondary" type="submit">清空并格式化为 FAT32</button></div></fieldset></form>
-<p id="storage-error" class="error" role="alert" hidden></p><p id="storage-progress" class="hint" role="status"></p>
-</section>
-<details id="logs-panel" class="card devices"><summary>系统日志</summary>
-<p class="hint">展开后每 5 秒更新。保留最近 24 小时、最多 2048 条，容量满时覆盖最旧记录；重启后清空。每条最多约 1 KiB，超长内容标记为截断。</p>
-<pre id="logs-content" class="log-output" tabindex="0" aria-label="应用日志"></pre><p id="logs-error" class="error" role="alert" hidden></p>
-</details>
-<section id="settings" class="card" aria-labelledby="settings-title"><h2 id="settings-title">网络设置</h2><form id="config-form">
-<fieldset><legend>Wi-Fi</legend><div class="fields"><div><label for="ssid">网络名称（SSID）</label><input id="ssid" name="ssid" required maxlength="32" autocomplete="off"><p class="hint">最多 32 个 UTF-8 字节。</p></div><div><label for="password">新的 Wi-Fi 密码</label><input id="password" name="password" type="password" maxlength="63" autocomplete="new-password" placeholder="留空保留当前密码"><p class="hint">8–63 字节；修改后需要重新连接。</p></div></div></fieldset>
-<fieldset><legend>AP 内网</legend><div class="fields"><div><label for="gateway">网关 IP 地址</label><input id="gateway" name="gateway" required inputmode="decimal" maxlength="15" placeholder="192.168.4.1" aria-describedby="gateway-hint"><p id="gateway-hint" class="hint">设置内网网段，例如 192.168.4.1。</p></div><div><label for="netmask">子网掩码</label><input id="netmask" name="netmask" required inputmode="decimal" maxlength="15" placeholder="255.255.255.0"></div><div><label for="dns">DNS 服务器</label><input id="dns" name="dns" inputmode="decimal" maxlength="15" placeholder="自动使用有线网络 DNS"><p class="hint">留空表示自动获取。</p></div></div></fieldset>
-<fieldset><legend>管理安全</legend><div class="fields"><div><label for="admin_password">新的管理密码</label><input id="admin_password" name="admin_password" type="password" maxlength="63" autocomplete="new-password" placeholder="留空保留当前密码"><p class="hint">8–63 字节，用于登录此页面。</p></div></div></fieldset>
-<div class="actions"><button id="save" type="submit">保存并重启</button><p class="muted">配置将持久保存。重启会暂时断开网络。</p></div><p id="config-error" class="error" role="alert" hidden></p>
-</form></section>
+@UI_network_html@
+@UI_storage_html@
+@UI_logs_html@
+@UI_settings_html@
 </section>
 </main>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <script>
-'use strict';
-const $ = id => document.getElementById(id);
-const configKeys = ['ssid', 'password', 'gateway', 'netmask', 'dns', 'admin_password'];
-let timer, toastTimer, configLoaded = false, refreshing = null, rebooting = false, authVersion = 0;
-let storageLoaded = false, storageState = null, storageSubmitting = false, storagePending = false;
-let logCursor = 0, logEntries = [], logsRefreshing = null;
-function message(id, text) { $(id).textContent = text; $(id).hidden = !text; }
-function toast(text) { message('toast', text); clearTimeout(toastTimer); toastTimer = setTimeout(() => message('toast', ''), 5000); }
-async function request(path, body) {
-  const options = {credentials:'same-origin', cache:'no-store'};
-  if (body !== undefined) Object.assign(options, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  const response = await fetch(path, options);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) { const error = new Error(data.error || '请求失败，请稍后重试。'); error.status = response.status; throw error; }
-  return data;
-}
-function loginView() {
-  authVersion++; clearInterval(timer); timer = undefined; configLoaded = false;
-  storageLoaded = false; storageState = null; storagePending = false;
-  $('login-panel').hidden = false; $('dashboard').hidden = true; $('logout').hidden = true;
-  $('login-password').value = ''; $('password').value = ''; $('admin_password').value = '';
-  $('smb-password').value = ''; $('storage-confirm').value = '';
-  logCursor = 0; logEntries = []; $('logs-content').textContent = ''; $('logs-panel').open = false;
-  message('logs-error', '');
-}
+@UI_common_js@
 @UI_logs_js@
 @UI_network_js@
 @UI_storage_js@
-async function refresh() {
-  if (refreshing === authVersion || rebooting) return;
-  const version = authVersion; refreshing = version;
-  try {
-    const data = await request('/api/status');
-    if (version !== authVersion) return;
-    storagePending = false;
-    render(data); $('login-panel').hidden = true; $('dashboard').hidden = false; $('logout').hidden = false;
-    $('refresh-state').textContent = '每 5 秒自动更新';
-    if (!timer) timer = setInterval(refresh, 5000);
-    refreshLogs();
-  } catch (error) {
-    if (version !== authVersion) return;
-    if (error.status === 401) loginView();
-    else if (!$('dashboard').hidden) $('refresh-state').textContent = '更新失败，正在重试…';
-    else message('login-error', '无法连接路由器，请检查网络后重试。');
-  } finally { if (refreshing === version) refreshing = null; }
-}
-$('login-form').addEventListener('submit', async event => {
-  event.preventDefault(); $('login-submit').disabled = true; message('login-error', '');
-  try { await request('/api/login', {password:$('login-password').value}); authVersion++; $('login-password').value = ''; await refresh(); }
-  catch (error) { message('login-error', error.message); }
-  finally { $('login-submit').disabled = false; }
-});
-$('logout').addEventListener('click', async () => {
-  $('logout').disabled = true;
-  try { await request('/api/logout', {}); loginView(); }
-  catch (error) { if (error.status === 401) loginView(); else toast(error.message); }
-  finally { $('logout').disabled = false; }
-});
 @UI_settings_js@
-
-refresh();
+@UI_app_js@
 </script>
 </body>
 </html>

@@ -77,7 +77,8 @@ Bootloader 保持 IDF 默认的 Size 优化，避免超出当前引导分区。�
 - `main/network/`：Wi-Fi AP、IPv4 子网、IPv6 透传与网络状态。
 - `main/config/`：路由配置校验与 NVS 持久化。
 - `main/storage/`：USB 磁盘、FAT32、存储配置；`smb/` 保存 SMB3 服务与文件协议处理。
-- `main/web/`：HTTP 管理接口、登录认证；`ui/` 保存页面资源。
+- `main/web/`：HTTP 管理接口、登录认证；`ui/` 中的 HTML、CSS 和 JS 按功能拆分。
+  CMake 将这些资源合成为一份内嵌页面，编辑后直接运行 `idf.py build`，无需前端工具链。
 - `main/system/`：系统日志缓存。
 - `tests/`：宿主单元测试、WebUI 行为测试和 SMB/FAT32 集成测试。
 - `components/smb3/`：ESP-IDF SMB 适配；`third_party/libsmb2/` 为固定版本子模块。

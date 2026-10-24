@@ -1,3 +1,4 @@
+let logCursor = 0, logEntries = [], logsRefreshing = null;
 async function refreshLogs() {
   const version = authVersion;
   if (logsRefreshing === version || rebooting || $('dashboard').hidden || !$('logs-panel').open) return;

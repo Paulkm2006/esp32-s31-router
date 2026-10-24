@@ -1,3 +1,5 @@
+const configKeys = ['ssid', 'password', 'gateway', 'netmask', 'dns', 'admin_password'];
+let configLoaded = false;
 $('config-form').addEventListener('submit', async event => {
   event.preventDefault(); message('config-error', '');
   const body = Object.fromEntries(configKeys.map(key => [key, $(key).value]));

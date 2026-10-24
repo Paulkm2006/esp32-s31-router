@@ -1,0 +1,14 @@
+<section id="storage-panel" class="card devices" aria-labelledby="storage-title">
+<div class="card-title"><h2 id="storage-title">USB 网络存储</h2><span id="storage-state" class="badge">读取中</span></div>
+<dl class="stats"><dt>磁盘容量</dt><dd id="storage-capacity">—</dd><dt>已用 / 可用空间</dt><dd id="storage-usage">—</dd><dt>共享地址</dt><dd id="storage-address">—</dd><dt>SMB 服务</dt><dd id="smb-state">—</dd><dt>PSRAM 可用 / 总量</dt><dd id="storage-psram">—</dd></dl>
+<p class="hint">仅支持 FAT32，单文件最大 4 GiB − 1 字节。拔盘前请先安全卸载。</p>
+<div class="actions"><button id="storage-mount" class="secondary" type="button">挂载</button><button id="storage-unmount" class="secondary" type="button">安全卸载</button></div>
+<form id="smb-form" style="margin-top:24px"><fieldset><legend>SMB3 共享设置</legend><div class="fields">
+<div><label for="smb-enabled">共享开关</label><input id="smb-enabled" type="checkbox" style="width:auto" aria-describedby="smb-hint"><p id="smb-hint" class="hint">开启后需要账号密码；保存会断开已有 SMB 连接。</p></div>
+<div><label for="smb-share">共享名称</label><input id="smb-share" required maxlength="32" pattern="[A-Za-z0-9_-]+" autocomplete="off"></div>
+<div><label for="smb-username">SMB 用户名</label><input id="smb-username" maxlength="32" pattern="[A-Za-z0-9_.-]*" autocomplete="username"></div>
+<div><label for="smb-password">新的 SMB 密码</label><input id="smb-password" type="password" maxlength="63" autocomplete="new-password" placeholder="留空保留当前密码"><p class="hint">8–63 个 UTF-8 字节，与管理密码独立。</p></div>
+</div></fieldset><button id="smb-save" type="submit">保存共享设置</button></form>
+<form id="storage-format-form" style="margin-top:24px"><fieldset><legend>格式化磁盘</legend><p class="error">将清空当前 USB 磁盘的全部分区和文件，创建一个 FAT32 分区，无法撤销。</p><label for="storage-confirm">输入 FORMAT 确认清空上方显示的磁盘</label><input id="storage-confirm" autocomplete="off" placeholder="FORMAT" maxlength="6"><div class="actions"><button id="storage-format" class="secondary" type="submit">清空并格式化为 FAT32</button></div></fieldset></form>
+<p id="storage-error" class="error" role="alert" hidden></p><p id="storage-progress" class="hint" role="status"></p>
+</section>
