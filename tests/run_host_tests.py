@@ -35,7 +35,8 @@ def main() -> None:
     includes = [ROOT / "tests/host", IDF / "components/esp_common/include",
                 IDF / "components/nvs_flash/include", ROOT / "build/config"]
     tests = {"subnet": [ROOT / "tests/test_subnet.c"],
-             "config": [ROOT / "tests/test_config.c", ROOT / "main/router_config.c"],
+             "config": [ROOT / "tests/test_config.c", ROOT / "main/router_config.c",
+                        ROOT / "main/router_storage_config.c"],
              "auth": [ROOT / "tests/test_auth.c", ROOT / "main/router_auth.c"],
              "ipv6": [ROOT / "tests/test_ipv6.c", ROOT / "main/router_ipv6.c"]}
     with tempfile.TemporaryDirectory(prefix="router-host-tests-") as temp:

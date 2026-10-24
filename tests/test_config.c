@@ -2,6 +2,7 @@
 #include <string.h>
 #include "nvs.h"
 #include "../main/router_config.h"
+#include "../main/router_storage_config.h"
 
 #define CHECK(condition) do { if (!(condition)) { return __LINE__; } } while (0)
 
@@ -105,5 +106,31 @@ int main(void)
     CHECK(router_config_load() == ESP_OK);
     CHECK(router_config_valid(router_config_get()));
     CHECK(strcmp(router_config_get()->ssid, "Saved router") != 0);
+    saved_size = 0;
+    commit_result = ESP_OK;
+    router_storage_config_t storage;
+    CHECK(router_storage_config_load(&storage) == ESP_OK && !storage.enabled);
+    storage.enabled = true;
+    CHECK(!router_storage_config_valid(&storage));
+    strcpy(storage.password, "Storage-secret!");
+    CHECK(router_storage_config_valid(&storage));
+    CHECK(router_storage_config_save(&storage) == ESP_OK);
+    router_storage_config_t loaded;
+    CHECK(router_storage_config_load(&loaded) == ESP_OK);
+    CHECK(memcmp(&loaded, &storage, sizeof(loaded)) == 0);
+    strcpy(storage.username, "../admin");
+    CHECK(router_storage_config_save(&storage) == ESP_ERR_INVALID_ARG);
+    storage = loaded;
+    storage.password[0] = '\n';
+    CHECK(!router_storage_config_valid(&storage));
+    storage = loaded;
+    memset(storage.password, 'x', sizeof(storage.password));
+    CHECK(!router_storage_config_valid(&storage));
+    storage = loaded;
+    strcpy(storage.password, "New-password!");
+    commit_result = ESP_FAIL;
+    CHECK(router_storage_config_save(&storage) == ESP_FAIL);
+    CHECK(router_storage_config_load(&storage) == ESP_OK);
+    CHECK(strcmp(storage.password, loaded.password) == 0);
     return 0;
 }
