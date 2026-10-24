@@ -17,8 +17,14 @@
 <form id="login-form"><label for="login-password">管理密码</label><input id="login-password" type="password" autocomplete="current-password" required maxlength="63"><button id="login-submit" type="submit">登录</button><p id="login-error" class="error" role="alert" hidden></p></form>
 </section>
 <section id="dashboard" hidden aria-label="路由器控制台">
-<div class="intro"><h2>网络概况</h2><p class="muted refresh"><span class="dot" aria-hidden="true"></span><span id="refresh-state" role="status">每 5 秒自动更新</span></p></div>
+<div class="intro"><h2>管理控制台</h2><p class="muted refresh"><span class="dot" aria-hidden="true"></span><span id="refresh-state" role="status">每 5 秒自动更新</span></p></div>
 <section id="reconnect" class="notice" role="status" hidden><h3>配置已保存，即将重启</h3><p>重新连接 Wi-Fi：<strong id="new-ssid"></strong></p><p>连接后打开：<a id="new-url"></a></p><p class="hint">请使用新密码连接；管理密码如有修改，下次登录时生效。若与有线网络网段冲突，请以设备日志中的 AP 网关地址为准。</p></section>
+<div id="tabs" class="tabs" role="tablist" aria-label="管理功能">
+<button id="tab-overview" type="button" role="tab" aria-controls="overview-panel" aria-selected="true" tabindex="0">网络概况</button>
+<button id="tab-settings" type="button" role="tab" aria-controls="settings" aria-selected="false" tabindex="-1">网络设置</button>
+<button id="tab-storage" type="button" role="tab" aria-controls="storage-panel" aria-selected="false" tabindex="-1">USB 存储</button>
+<button id="tab-logs" type="button" role="tab" aria-controls="logs-panel" aria-selected="false" tabindex="-1">系统日志</button>
+</div>
 @UI_network_html@
 @UI_storage_html@
 @UI_logs_html@
@@ -28,6 +34,7 @@
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 <script>
 @UI_common_js@
+@UI_tabs_js@
 @UI_logs_js@
 @UI_network_js@
 @UI_storage_js@

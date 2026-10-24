@@ -17,6 +17,6 @@ function loginView() {
   $('login-panel').hidden = false; $('dashboard').hidden = true; $('logout').hidden = true;
   $('login-password').value = ''; $('password').value = ''; $('admin_password').value = '';
   $('smb-password').value = ''; $('storage-confirm').value = '';
-  logCursor = 0; logEntries = []; $('logs-content').textContent = ''; $('logs-panel').open = false;
+  logCursor = 0; logEntries = []; $('logs-content').textContent = ''; selectTab('overview');
   message('logs-error', '');
 }

@@ -12,7 +12,7 @@ $('config-form').addEventListener('submit', async event => {
     const data = await request('/api/config', body);
     rebooting = true; authVersion++; clearInterval(timer); $('settings').hidden = true; $('logout').hidden = true;
     $('storage-panel').hidden = true; $('smb-password').value = ''; $('storage-confirm').value = '';
-    $('logs-panel').open = false; $('logs-panel').hidden = true;
+    $('logs-panel').hidden = true; $('overview-panel').hidden = true; $('tabs').hidden = true;
     $('refresh-state').textContent = '等待路由器重启，请重新连接 Wi-Fi';
     $('new-ssid').textContent = body.ssid;
     const url = 'http://' + data.gateway + '/'; $('new-url').textContent = url; $('new-url').setAttribute('href', url);

@@ -9,18 +9,34 @@ const html = readFileSync(new URL('router_web.html', uiRoot), 'utf8').replace(
 assert.doesNotMatch(html, /@UI_/);
 class Element {
   value = ''; textContent = ''; hidden = false; disabled = false; children = []; listeners = {}; attributes = {};
-  open = false; scrollTop = 0; clientHeight = 300; scrollHeight = 600;
+  scrollTop = 0; clientHeight = 300; scrollHeight = 600;
   addEventListener(name, handler) { this.listeners[name] = handler; }
   append(child) { this.children.push(child); }
   replaceChildren() { this.children = []; }
   setAttribute(name, value) { this.attributes[name] = value; }
   scrollIntoView() {}
+  focus() { this.focused = true; }
   set innerHTML(_) { assert.fail('Use textContent for values from the router.'); }
 }
 const elements = Object.fromEntries([...html.matchAll(/<[^>]+\bid="([^"]+)"[^>]*>/g)].map(([tag, id]) => {
-  const element = new Element(); element.hidden = /\bhidden\b/.test(tag); return [id, element];
+  const element = new Element(); element.hidden = /\bhidden\b/.test(tag);
+  for (const [, name, value] of tag.matchAll(/([\w-]+)="([^"]*)"/g)) element.attributes[name] = value;
+  element.tabIndex = Number(element.attributes.tabindex || 0); return [id, element];
 }));
 const $ = id => elements[id];
+assert.equal([...html.matchAll(/\bid="([^"]+)"/g)].length, Object.keys(elements).length, 'IDs must be unique across feature views.');
+const panels = {overview:'overview-panel', settings:'settings', storage:'storage-panel', logs:'logs-panel'};
+function assertTab(selected) {
+  for (const [name, panel] of Object.entries(panels)) {
+    assert.equal($(panel).hidden, name !== selected);
+    assert.equal($('tab-' + name).attributes['aria-selected'], String(name === selected));
+    assert.equal($('tab-' + name).attributes['aria-controls'], panel);
+    assert.equal($(panel).attributes['aria-labelledby'], 'tab-' + name);
+    assert.equal($('tab-' + name).tabIndex, name === selected ? 0 : -1);
+  }
+}
+const clickTab = name => $('tab-' + name).listeners.click();
+const pressTab = (name, key) => $('tab-' + name).listeners.keydown({key, preventDefault() {}});
 const requests = [], intervals = new Map();
 let handleRequest = () => ({status:401, data:{error:'请登录。'}}), nextTimer = 0;
 const context = vm.createContext({
@@ -59,6 +75,18 @@ await submit('login-form');
 assert.equal($('dashboard').hidden, false);
 assert.equal($('login-password').value, '');
 assert.equal(intervals.size, 1);
+assertTab('overview');
+await clickTab('settings'); assertTab('settings');
+$('ssid').value = 'tab draft';
+await clickTab('storage'); assertTab('storage');
+$('smb-username').value = 'tab-user';
+await pressTab('storage', 'ArrowLeft'); assertTab('settings');
+assert.equal($('tab-settings').focused, true);
+assert.equal($('ssid').value, 'tab draft');
+await clickTab('storage');
+assert.equal($('smb-username').value, 'tab-user');
+await pressTab('storage', 'Home'); assertTab('overview');
+$('ssid').value = status.config.ssid; $('smb-username').value = 'router';
 const login = requests.find(request => request.path === '/api/login');
 assert.equal(login.options.credentials, 'same-origin');
 assert.equal(login.options.headers['Content-Type'], 'application/json');
@@ -72,14 +100,14 @@ assert.equal($('storage-address').textContent, '\\\\192.168.4.1\\usb');
 assert.equal($('storage-mount').disabled, true);
 assert.equal($('storage-unmount').disabled, false);
 assert.equal($('smb-password').value, '');
-assert.equal(requests.some(request => request.path.startsWith('/api/logs')), false, 'Closed logs must not poll.');
+assert.equal(requests.some(request => request.path.startsWith('/api/logs')), false, 'Hidden logs must not poll.');
 const logPages = [
   {first:0, next:2, reset:false, more:true, entries:[{id:0, text:'\x1b[31mfirst\x1b[0m\n'}, {id:1, text:'<img src=x onerror=alert(1)>\n'}]},
   {first:0, next:3, reset:false, more:false, entries:[{id:2, text:'third\n'}]},
 ];
 handleRequest = path => path.startsWith('/api/logs') ? {status:200, data:logPages.shift()} : {status:200, data:status};
-$('logs-panel').open = true;
-await $('logs-panel').listeners.toggle();
+await pressTab('overview', 'End'); assertTab('logs');
+assert.equal($('tab-logs').focused, true);
 assert.equal(requests.at(-1).path, '/api/logs?after=2');
 assert.equal($('logs-content').textContent, 'first\n<img src=x onerror=alert(1)>\nthird\n');
 assert.equal($('logs-content').scrollTop, 600);
@@ -95,6 +123,19 @@ handleRequest = () => ({status:503, data:{error:'日志缓存不可用或内存�
 await vm.runInContext('refreshLogs()', context);
 assert.equal($('logs-error').hidden, false);
 assert.equal($('logs-content').textContent, 'after overflow\n');
+let resolveHiddenLog;
+handleRequest = () => new Promise(resolve => { resolveHiddenLog = resolve; });
+const hiddenLogRequest = vm.runInContext('refreshLogs()', context);
+await pressTab('logs', 'ArrowRight'); assertTab('overview');
+resolveHiddenLog({status:200, data:{first:10, next:12, reset:false, more:true, entries:[{id:11, text:'hidden response'}]}});
+const beforeHiddenResponse = requests.length;
+await hiddenLogRequest;
+assert.equal(requests.length, beforeHiddenResponse, 'Leaving logs stops pagination.');
+assert.equal($('logs-content').textContent, 'after overflow\n');
+await vm.runInContext('refreshLogs()', context);
+assert.equal(requests.length, beforeHiddenResponse, 'Hidden logs do not poll.');
+handleRequest = () => ({status:503, data:{error:'日志缓存不可用或内存不足'}});
+await clickTab('logs');
 let resolveLogs;
 handleRequest = () => new Promise(resolve => { resolveLogs = resolve; });
 const staleLogs = vm.runInContext('refreshLogs()', context);
@@ -107,13 +148,14 @@ await staleLogs;
 assert.equal($('logs-content').textContent, '', 'An old log request must not restore logs after logout.');
 handleRequest = path => ({status:200, data:path === '/api/status' ? status : {}});
 await submit('login-form');
-$('logs-panel').open = true;
+await clickTab('logs');
 handleRequest = () => ({status:401, data:{error:'请登录。'}});
 await vm.runInContext('refreshLogs()', context);
 assert.equal($('dashboard').hidden, true);
 assert.equal(intervals.size, 0);
 handleRequest = path => ({status:200, data:path === '/api/status' ? status : {}});
 await submit('login-form');
+assertTab('overview'); await clickTab('settings');
 $('ssid').value = 'unsaved edit';
 await vm.runInContext('refresh()', context);
 assert.equal($('ssid').value, 'unsaved edit', 'Polling must preserve unsaved settings.');
@@ -135,6 +177,7 @@ assert.deepEqual(JSON.parse(requests.at(-1).options.body), {});
 assert.equal($('login-panel').hidden, false);
 assert.equal(intervals.size, 0);
 await submit('login-form');
+await clickTab('settings');
 $('ssid').value = '网络名称太长'.repeat(6);
 const beforeInvalid = requests.length;
 await submit('config-form');
@@ -152,6 +195,7 @@ assert.equal($('settings').hidden, false);
 assert.equal($('save').disabled, false);
 
 handleRequest = path => ({status:200, data:path === '/api/status' ? status : {accepted:true}});
+await clickTab('storage');
 const storageBefore = requests.length;
 await submit('storage-format-form');
 assert.equal(requests.length, storageBefore, 'Formatting needs an explicit confirmation.');
@@ -190,6 +234,7 @@ assert.equal($('storage-unmount').disabled, false);
 let resolveStatus;
 handleRequest = path => path === '/api/status' ? new Promise(resolve => { resolveStatus = resolve; }) : {status:200, data:{rebooting:true, gateway:'192.168.5.1'}};
 const staleRefresh = vm.runInContext('refresh()', context);
+await clickTab('settings');
 await submit('config-form');
 assert.deepEqual(JSON.parse(requests.at(-1).options.body), {ssid:'新网络', password:'密密码', gateway:'192.168.5.1', netmask:'255.255.255.0', dns:'', admin_password:''});
 assert.equal($('reconnect').hidden, false);
@@ -198,9 +243,12 @@ assert.equal($('new-url').attributes.href, 'http://192.168.5.1/');
 assert.equal($('settings').hidden, true);
 assert.equal($('storage-panel').hidden, true);
 assert.equal($('logs-panel').hidden, true);
+assert.equal($('tabs').hidden, true);
+await clickTab('storage');
+assert.equal($('storage-panel').hidden, true, 'Reboot must keep controls hidden.');
 assert.equal($('password').value, '');
 assert.equal(intervals.size, 0);
 resolveStatus({status:200, data:status}); await staleRefresh;
 assert.equal($('logout').hidden, true, 'An old refresh must not restore controls after reboot starts.');
 assert.equal(intervals.size, 0);
-console.log('Web UI checks passed: login, logs, safe rendering, polling, validation and reconnect flow.');
+console.log('Web UI checks passed: feature tabs, keyboard navigation, drafts, login, logs, storage, validation and reconnect flow.');
