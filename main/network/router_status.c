@@ -7,7 +7,7 @@
 #include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
-#include "router_config.h"
+#include "config/router_config.h"
 #include "router_status.h"
 
 typedef struct {

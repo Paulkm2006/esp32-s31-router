@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "router_disk.h"
+#include "storage/router_disk.h"
 #include "router_smb_internal.h"
 
 uint64_t router_smb_get(const void *data, unsigned bytes)

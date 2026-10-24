@@ -11,7 +11,7 @@
 #include "freertos/task.h"
 #include "usb/usb_host.h"
 #include "router_disk.h"
-#include "router_smb.h"
+#include "storage/smb/router_smb.h"
 #include "router_storage.h"
 
 typedef enum {MOUNT = 1, UNMOUNT, FORMAT, CONFIGURE, CONNECT, DISCONNECT} action_t;

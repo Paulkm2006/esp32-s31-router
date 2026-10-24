@@ -33,14 +33,14 @@ def main() -> None:
         raise SystemExit("Set CC to a C compiler; Windows also supports MSVC installed with Build Tools.")
     msvc = Path(compiler).name.lower() in {"cl", "cl.exe"}
     cjson = ROOT / "managed_components/espressif__cjson/cJSON"
-    includes = [ROOT / "tests/host", cjson, IDF / "components/esp_common/include",
+    includes = [ROOT / "main", ROOT / "tests/host", cjson, IDF / "components/esp_common/include",
                 IDF / "components/nvs_flash/include", ROOT / "build/config"]
     tests = {"subnet": [ROOT / "tests/test_subnet.c"],
-             "config": [ROOT / "tests/test_config.c", ROOT / "main/router_config.c",
-                        ROOT / "main/router_storage_config.c"],
-             "auth": [ROOT / "tests/test_auth.c", ROOT / "main/router_auth.c"],
-             "ipv6": [ROOT / "tests/test_ipv6.c", ROOT / "main/router_ipv6.c"],
-             "log": [ROOT / "tests/test_log.c", ROOT / "main/router_log.c", cjson / "cJSON.c"]}
+             "config": [ROOT / "tests/test_config.c", ROOT / "main/config/router_config.c",
+                        ROOT / "main/storage/router_storage_config.c"],
+             "auth": [ROOT / "tests/test_auth.c", ROOT / "main/web/router_auth.c"],
+             "ipv6": [ROOT / "tests/test_ipv6.c", ROOT / "main/network/router_ipv6.c"],
+             "log": [ROOT / "tests/test_log.c", ROOT / "main/system/router_log.c", cjson / "cJSON.c"]}
     with tempfile.TemporaryDirectory(prefix="router-host-tests-") as temp:
         for name, sources in tests.items():
             test_includes = ([ROOT / "tests/host" / name] if name in {"ipv6", "log"} else []) + includes

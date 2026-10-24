@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-const html = readFileSync(new URL('../main/router_web.html', import.meta.url), 'utf8');
+const html = readFileSync(new URL('../main/web/ui/router_web.html', import.meta.url), 'utf8');
 class Element {
   value = ''; textContent = ''; hidden = false; disabled = false; children = []; listeners = {}; attributes = {};
   open = false; scrollTop = 0; clientHeight = 300; scrollHeight = 600;

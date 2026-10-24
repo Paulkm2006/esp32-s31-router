@@ -2,8 +2,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include "../main/router_auth.h"
-#include "../main/router_config.h"
+#include "../main/web/router_auth.h"
+#include "../main/config/router_config.h"
 
 #define CHECK(condition) do { if (!(condition)) { return __LINE__; } } while (0)
 static int64_t now = 2000000;

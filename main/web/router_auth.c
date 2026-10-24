@@ -5,7 +5,7 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "router_auth.h"
-#include "router_config.h"
+#include "config/router_config.h"
 
 static char session[65];
 static char login_cookie[160];

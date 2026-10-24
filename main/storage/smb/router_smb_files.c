@@ -3,7 +3,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
-#include "router_disk.h"
+#include "storage/router_disk.h"
 #include "router_smb_internal.h"
 
 bool router_smb_path(const char *name, char *out, size_t size)

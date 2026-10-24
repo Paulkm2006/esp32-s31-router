@@ -9,11 +9,11 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "router_auth.h"
-#include "router_config.h"
+#include "config/router_config.h"
 #include "router_http.h"
-#include "router_log.h"
-#include "router_status.h"
-#include "router_storage.h"
+#include "system/router_log.h"
+#include "network/router_status.h"
+#include "storage/router_storage.h"
 
 _Static_assert(CONFIG_CJSON_NESTING_LIMIT <= 8, "Set cJSON maximum nesting depth to 8 or less");
 

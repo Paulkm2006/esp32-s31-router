@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-#include "../main/router_subnet.h"
+#include "../main/network/router_subnet.h"
 
 #define CHECK(condition) do { if (!(condition)) { return __LINE__; } } while (0)
 

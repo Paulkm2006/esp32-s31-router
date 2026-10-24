@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
-#include "../main/router_log.h"
+#include "../main/system/router_log.h"
 
 static int64_t now;
 static bool no_psram = true;

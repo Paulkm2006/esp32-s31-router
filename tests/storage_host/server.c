@@ -5,9 +5,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "diskio.h"
-#include "../../main/router_disk.h"
+#include "../../main/storage/router_disk.h"
 // Reuse the production authentication and connection callbacks as well as its file handlers.
-#include "../../main/router_smb.c"
+#include "../../main/storage/smb/router_smb.c"
 
 static FILE *image;
 static bool fail_sync;

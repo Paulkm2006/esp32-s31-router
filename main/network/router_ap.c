@@ -8,7 +8,7 @@
 #include "esp_wifi_default.h"
 #include "sdkconfig.h"
 #include "router_ap.h"
-#include "router_config.h"
+#include "config/router_config.h"
 #include "router_ipv6.h"
 #include "router_subnet.h"
 

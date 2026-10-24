@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include <string.h>
 #include "nvs.h"
-#include "../main/router_config.h"
-#include "../main/router_storage_config.h"
+#include "../main/config/router_config.h"
+#include "../main/storage/router_storage_config.h"
 
 #define CHECK(condition) do { if (!(condition)) { return __LINE__; } } while (0)
 

@@ -23,8 +23,8 @@ foreach(name esp_netif.h esp_err.h esp_heap_caps.h esp_log.h esp_random.h
     file(WRITE "${CMAKE_BINARY_DIR}/shims/${name}" "#include \"compat.h\"\n")
 endforeach()
 add_executable(router_smb_host server.c "${FAT}/ff.c" "${FAT}/ffunicode.c"
-    "${ROOT}/main/router_disk.c" "${ROOT}/main/router_smb_files.c" "${ROOT}/main/router_smb_info.c" "${ROOT}/main/router_smb_dir.c")
-target_include_directories(router_smb_host PRIVATE . "${CMAKE_BINARY_DIR}/shims" "${FAT}"
+    "${ROOT}/main/storage/router_disk.c" "${ROOT}/main/storage/smb/router_smb_files.c" "${ROOT}/main/storage/smb/router_smb_info.c" "${ROOT}/main/storage/smb/router_smb_dir.c")
+target_include_directories(router_smb_host PRIVATE . "${ROOT}/main" "${CMAKE_BINARY_DIR}/shims" "${FAT}"
     "${ROOT}/third_party/libsmb2/include" "${ROOT}/third_party/libsmb2/include/smb2")
 target_compile_options(router_smb_host PRIVATE -include stddef.h -ffunction-sections -fdata-sections -Wall -Wextra)
 target_link_options(router_smb_host PRIVATE -Wl,--gc-sections)

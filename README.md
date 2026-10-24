@@ -71,6 +71,17 @@ Bootloader 保持 IDF 默认的 Size 优化，避免超出当前引导分区。�
 日志接口 `/api/logs` 需要管理登录，仅在展开日志面板时轮询；退出登录会清空浏览器中的日志。
 若无法分配 PSRAM，路由功能继续运行，日志面板提示缓存不可用。
 
+## 代码目录
+
+- `main/router_main.c`：启动顺序与网络事件协调。
+- `main/network/`：Wi-Fi AP、IPv4 子网、IPv6 透传与网络状态。
+- `main/config/`：路由配置校验与 NVS 持久化。
+- `main/storage/`：USB 磁盘、FAT32、存储配置；`smb/` 保存 SMB3 服务与文件协议处理。
+- `main/web/`：HTTP 管理接口、登录认证；`ui/` 保存页面资源。
+- `main/system/`：系统日志缓存。
+- `tests/`：宿主单元测试、WebUI 行为测试和 SMB/FAT32 集成测试。
+- `components/smb3/`：ESP-IDF SMB 适配；`third_party/libsmb2/` 为固定版本子模块。
+
 ## 组件管理
 
 本项目已通过以下命令添加依赖，不需要在已有检出中重复执行：

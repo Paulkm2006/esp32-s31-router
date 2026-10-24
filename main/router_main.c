@@ -7,13 +7,13 @@
 #include "esp_wifi.h"
 #include "ethernet_init.h"
 #include "nvs_flash.h"
-#include "router_ap.h"
-#include "router_config.h"
-#include "router_http.h"
-#include "router_ipv6.h"
-#include "router_log.h"
-#include "router_status.h"
-#include "router_storage.h"
+#include "network/router_ap.h"
+#include "config/router_config.h"
+#include "web/router_http.h"
+#include "network/router_ipv6.h"
+#include "system/router_log.h"
+#include "network/router_status.h"
+#include "storage/router_storage.h"
 
 static const char *TAG = "router";
 static esp_netif_t *wan;

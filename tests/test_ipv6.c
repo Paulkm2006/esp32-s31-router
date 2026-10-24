@@ -4,7 +4,7 @@
 #include "esp_event.h"
 #include "esp_wifi.h"
 #include "lwip/esp_netif_net_stack.h"
-#include "../main/router_ipv6.h"
+#include "../main/network/router_ipv6.h"
 
 const char ETH_EVENT[] = "eth", WIFI_EVENT[] = "wifi";
 static esp_netif_t ap = {{2, 0, 0, 0, 0, 1}}, wan = {{2, 0, 0, 0, 0, 2}};
