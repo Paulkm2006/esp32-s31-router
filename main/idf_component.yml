@@ -3,3 +3,4 @@ dependencies:
     version: '>=6.1.0'
   espressif/ethernet_init: ==1.4.1
   espressif/cjson: ^1.7.19
+  espressif/usb_host_msc: ^1.1.4
