@@ -2,7 +2,7 @@
 
 适用于乐鑫 ESP32-S31-Function-CoreBoard-1：板载 RJ45 / YT8531 RGMII PHY，Wi-Fi 使用 AP 模式。
 
-有线网络通过 DHCP 为板子分配 WAN 地址、网关和 DNS；手机、电脑接入热点后，由板子提供 DHCP，通过 IPv4 NAPT 访问上游网络。
+有线网络通过 DHCP 为板子分配 WAN 地址、网关和 DNS；手机、电脑接入热点后，由板子提供 DHCP，通过 IPv4 NAPT 访问上游网络。IPv6 通过以太网与热点之间的二层透传，直接使用上游路由器提供的地址和默认路由。
 
 ## 构建与使用
 
@@ -16,7 +16,7 @@
 
 将 COMx 替换为实际串口。退出串口监视器用 Ctrl+]。
 
-Bootloader 保持 IDF 默认的 Size 优化，避免超出当前引导分区。复用旧 sdkconfig 时，将 Component config → cJSON 的最大嵌套深度设为 8 或以下，限制登录请求的解析栈用量；全新配置已通过 sdkconfig.defaults 设置。
+Bootloader 保持 IDF 默认的 Size 优化，避免超出当前引导分区。复用旧 sdkconfig 时，将 Component config → cJSON 的最大嵌套深度设为 8 或以下，限制登录请求的解析栈用量；并启用 `CONFIG_ETH_TRANSMIT_MUTEX=y`，保护 IPv4 与 IPv6 的并发以太网发送。全新配置已通过 sdkconfig.defaults 设置。
 
 在 menuconfig 的 Router Wi-Fi AP 中设置 SSID、密码、信道和最大接入数。默认值：
 
@@ -98,7 +98,28 @@ PHY 使用板载晶振，PHY_REF_CLK 为 -1，PHY 地址自动探测。保留原
 - 拔网线或 WAN 丢失 IP 时关闭 NAPT，保留热点和本地 DHCP；重新取得 WAN 地址后恢复。
 - 仅 DNS 改变而 IP/网关/掩码均不变的 DHCP 续租不会触发 IDF GOT_IP 事件；此时重新插拔网线或重启板子以同步 DNS。
 - NAPT 不提供入站防火墙；能添加到 LAN 子网路由的上游设备仍可主动访问热点客户端。
-- 当前提供 IPv4 NAT 和管理网页；未实现 IPv6 转发或 OTA。NVS 初始化失败会报错，不会自动擦除已有 NVS。
+- 当前提供 IPv4 NAT、IPv6 透传和管理网页；未实现 OTA。NVS 初始化失败会报错，不会自动擦除已有 NVS。
+
+## IPv6 透传
+
+适用于上游普通路由器已经提供 IPv6 的场景：电脑直接连接该路由器 LAN 口时应能使用 IPv6，且上游允许同一网口下出现多个设备 MAC。板子只透传未带 VLAN 标签的 IPv6 以太网帧，IPv4 仍使用原来的 DHCP/NAPT。
+
+上游的 RA、邻居发现、DHCPv6 和 IPv6 数据包直接在 Ethernet 与 Wi-Fi AP 间传送，不改写地址或 Hop Limit。客户端的 IPv6 地址和默认路由由上游提供；无需开启 lwIP 的 IPv6 forwarding 或 SLAAC，也无需设置新的 LAN IPv6 前缀。透传依赖以太网链路和 AP 启动状态，不依赖板子的 IPv4 DHCP 是否成功。
+
+启动时应出现以下日志，表示透传模块已安装；它不代表客户端已经获得 IPv6 或通过互联网连通性验证：
+
+    router_ipv6: IPv6 passthrough enabled (Ethernet <-> Wi-Fi AP)
+
+IPv6 客户端与上游处于同一二层网络，入站访问控制依赖上游路由器的 IPv6 防火墙。此实现不提供 IPv6 防火墙、NAT66、独立下游前缀或前缀委派，也不为板子本身配置 IPv6 地址。管理页面及设备列表仍使用 IPv4。
+
+上板后，在连接热点的电脑上验收（关闭其他网络出口；Windows 使用 `curl.exe`）：
+
+1. 查看客户端地址与路由，确认具有上游提供的 IPv6 地址和默认路由；只有 `fe80::` 链路本地地址不算成功。
+2. 使用 `ping -6 2606:4700:4700::1111` 检查 IPv6 IP 连通性，再用 `curl -6 --connect-timeout 10 https://example.com/` 验证 DNS、TCP 和 HTTPS。
+3. 同时检查原有 IPv4 上网和管理页面，确认双栈均可使用。
+4. 拔插网线、重启上游和重连热点后，确认客户端能重新发现 IPv6 路由并恢复上网。
+
+若没有获得 IPv6，先检查上游 RA 是否启用；透传不能让 IPv4-only 上游产生 IPv6。宿主测试覆盖帧转发、MAC 过滤、断线恢复、错误处理和缓冲区释放，实际多播收发、吞吐与客户端兼容性仍需实板验证。
 
 ## 验证
 
@@ -113,7 +134,7 @@ Windows 可使用同等的宿主 C 编译器。ESP-IDF 的 RISC-V 交叉编译�
 
     node tests/test_web_ui.mjs
 
-配置校验、NVS 提交/重载/失败恢复、登录会话和子网宿主测试：
+配置校验、NVS 提交/重载/失败恢复、登录会话、子网及 IPv6 透传宿主测试：
 
     python tests/run_host_tests.py
 
@@ -143,4 +164,5 @@ Windows 可使用同等的宿主 C 编译器。ESP-IDF 的 RISC-V 交叉编译�
 - [S31 支持状态](https://developer.espressif.com/hardware/esp32s31/)
 - [ethernet_init 组件](https://components.espressif.com/components/espressif/ethernet_init/versions/1.4.1/readme)
 - [ESP-NETIF API](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s31/api-reference/network/esp_netif_programming.html)
+- [ESP-IDF Ethernet / SoftAP 二层转发示例](https://github.com/espressif/esp-idf/tree/v6.1/examples/network/eth2ap)
 - [IDF 6.x JSON 组件迁移说明](https://docs.espressif.com/projects/esp-idf/en/v6.0/esp32/migration-guides/release-6.x/6.0/protocols.html)
