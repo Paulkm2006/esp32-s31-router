@@ -18,10 +18,43 @@ static esp_eth_handle_t s_eth;
 static uint8_t s_wan_mac[6];
 static struct {
     uint8_t mac[6];
-    bool connected;
+    uint8_t filter_mac[6];
+    bool connected, filtered;
 } s_clients[ESP_WIFI_MAX_CONN_NUM];
-static bool s_link, s_ap_up;
+static bool s_link, s_ap_up, s_all_multicast;
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
+
+static void update_filters(void)
+{
+    bool promiscuous = !s_all_multicast;
+    for (size_t i = 0; i < ESP_WIFI_MAX_CONN_NUM; ++i) {
+        if (s_clients[i].filtered && (!s_clients[i].connected ||
+            memcmp(s_clients[i].mac, s_clients[i].filter_mac, 6) != 0)) {
+            esp_err_t err = esp_eth_ioctl(s_eth, ETH_CMD_DEL_MAC_FILTER, s_clients[i].filter_mac);
+            if (err == ESP_OK || err == ESP_ERR_NOT_FOUND) {
+                s_clients[i].filtered = false;
+            } else {
+                promiscuous = true;
+            }
+        }
+    }
+    for (size_t i = 0; i < ESP_WIFI_MAX_CONN_NUM; ++i) {
+        if (s_clients[i].connected) {
+            if (!s_clients[i].filtered &&
+                esp_eth_ioctl(s_eth, ETH_CMD_ADD_MAC_FILTER, s_clients[i].mac) == ESP_OK) {
+                memcpy(s_clients[i].filter_mac, s_clients[i].mac, 6);
+                s_clients[i].filtered = true;
+            }
+            if (!s_clients[i].filtered || memcmp(s_clients[i].mac, s_clients[i].filter_mac, 6) != 0) {
+                promiscuous = true;
+            }
+        }
+    }
+    esp_err_t err = esp_eth_ioctl(s_eth, ETH_CMD_S_PROMISCUOUS, &promiscuous);
+    if (err != ESP_OK) {
+        ESP_LOGE("router_ipv6", "Cannot update Ethernet RX filters: %s", esp_err_to_name(err));
+    }
+}
 
 static bool client_mac(const uint8_t *mac)
 {
@@ -81,6 +114,7 @@ const esp_netif_netstack_config_t router_ipv6_ap_stack = {
 static void event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
+    bool filters_changed = false;
     portENTER_CRITICAL(&s_lock);
     if (base == ETH_EVENT && data != NULL && *(esp_eth_handle_t *)data == s_eth) {
         if (id == ETHERNET_EVENT_CONNECTED) {
@@ -92,22 +126,32 @@ static void event(void *arg, esp_event_base_t base, int32_t id, void *data)
         if (id == WIFI_EVENT_AP_START || id == WIFI_EVENT_AP_STOP) {
             s_ap_up = id == WIFI_EVENT_AP_START;
             if (!s_ap_up) {
-                memset(s_clients, 0, sizeof(s_clients));
+                for (size_t i = 0; i < ESP_WIFI_MAX_CONN_NUM; ++i) {
+                    s_clients[i].connected = false;
+                }
             }
+            filters_changed = true;
         } else if (id == WIFI_EVENT_AP_STACONNECTED) {
             const wifi_event_ap_staconnected_t *client = data;
             if (client != NULL && client->aid > 0 && client->aid <= ESP_WIFI_MAX_CONN_NUM) {
                 memcpy(s_clients[client->aid - 1].mac, client->mac, 6);
                 s_clients[client->aid - 1].connected = true;
+                filters_changed = true;
             }
         } else if (id == WIFI_EVENT_AP_STADISCONNECTED) {
             const wifi_event_ap_stadisconnected_t *client = data;
-            if (client != NULL && client->aid > 0 && client->aid <= ESP_WIFI_MAX_CONN_NUM) {
+            if (client != NULL && client->aid > 0 && client->aid <= ESP_WIFI_MAX_CONN_NUM &&
+                memcmp(s_clients[client->aid - 1].mac, client->mac, 6) == 0) {
                 s_clients[client->aid - 1].connected = false;
+                filters_changed = true;
             }
         }
     }
     portEXIT_CRITICAL(&s_lock);
+    // Driver filter updates may take a mutex; keep them outside the RX spinlock.
+    if (filters_changed) {
+        update_filters();
+    }
 }
 
 esp_err_t router_ipv6_init(esp_netif_t *ap, esp_netif_t *wan, esp_eth_handle_t eth)
@@ -122,9 +166,14 @@ esp_err_t router_ipv6_init(esp_netif_t *ap, esp_netif_t *wan, esp_eth_handle_t e
     if (err != ESP_OK) {
         return err;
     }
-    bool promiscuous = true;
+    bool all_multicast = true;
+    s_all_multicast = esp_eth_ioctl(eth, ETH_CMD_S_ALL_MULTICAST, &all_multicast) == ESP_OK;
+    bool promiscuous = !s_all_multicast;
     err = esp_eth_ioctl(eth, ETH_CMD_S_PROMISCUOUS, &promiscuous);
     if (err != ESP_OK) {
+        all_multicast = false;
+        esp_eth_ioctl(eth, ETH_CMD_S_ALL_MULTICAST, &all_multicast);
+        s_all_multicast = false;
         return err;
     }
     s_ap = ap;
@@ -140,6 +189,9 @@ esp_err_t router_ipv6_init(esp_netif_t *ap, esp_netif_t *wan, esp_eth_handle_t e
     if (err != ESP_OK) {
         promiscuous = false;
         esp_eth_ioctl(eth, ETH_CMD_S_PROMISCUOUS, &promiscuous);
+        all_multicast = false;
+        esp_eth_ioctl(eth, ETH_CMD_S_ALL_MULTICAST, &all_multicast);
+        s_all_multicast = false;
         s_ap = s_wan = NULL;
         s_eth = NULL;
         return err;

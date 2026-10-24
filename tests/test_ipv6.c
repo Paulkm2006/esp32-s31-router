@@ -13,7 +13,9 @@ static const uint8_t multicast[6] = {0x33, 0x33, 0, 0, 0, 1};
 static esp_event_handler_t handlers[2];
 static int registrations, fail_registration, releases, transmissions, local_inputs;
 static esp_err_t mac_result, ioctl_result, tx_result;
-static bool promiscuous;
+static bool promiscuous, all_multicast, fail_multicast, fail_add, fail_delete;
+static uint8_t filters[8][6];
+static size_t filter_count;
 static uint8_t frame[1600], expected[1600], wifi_buffer;
 static void *expected_free;
 static esp_netif_t *expected_target, *expected_source;
@@ -26,9 +28,28 @@ esp_err_t esp_netif_get_mac(esp_netif_t *netif, uint8_t *mac)
 }
 esp_err_t esp_eth_ioctl(esp_eth_handle_t handle, int cmd, void *data)
 {
-    assert(handle == &wan && cmd == ETH_CMD_S_PROMISCUOUS);
-    if (ioctl_result == ESP_OK) { promiscuous = *(bool *)data; }
-    return ioctl_result;
+    assert(handle == &wan);
+    if (ioctl_result != ESP_OK) return ioctl_result;
+    if (cmd == ETH_CMD_S_PROMISCUOUS) promiscuous = *(bool *)data;
+    else if (cmd == ETH_CMD_S_ALL_MULTICAST) {
+        if (fail_multicast) return ESP_FAIL;
+        all_multicast = *(bool *)data;
+    } else if (cmd == ETH_CMD_ADD_MAC_FILTER) {
+        if (fail_add || filter_count == 8) return ESP_FAIL;
+        for (size_t i = 0; i < filter_count; ++i) assert(memcmp(filters[i], data, 6) != 0);
+        memcpy(filters[filter_count++], data, 6);
+    } else {
+        assert(cmd == ETH_CMD_DEL_MAC_FILTER);
+        if (fail_delete) return ESP_FAIL;
+        for (size_t i = 0; i < filter_count; ++i) {
+            if (memcmp(filters[i], data, 6) == 0) {
+                memcpy(filters[i], filters[--filter_count], 6);
+                return ESP_OK;
+            }
+        }
+        return ESP_ERR_NOT_FOUND;
+    }
+    return ESP_OK;
 }
 esp_err_t esp_event_handler_register(esp_event_base_t base, int32_t id,
                                      esp_event_handler_t handler, void *arg)
@@ -77,6 +98,13 @@ static void packet(const uint8_t *dest, const uint8_t *source)
 }
 static void receive(bool wifi, size_t len, esp_netif_t *target, bool local)
 {
+    if (!wifi && target != NULL && !promiscuous) {
+        bool accepted = (frame[0] & 1) && all_multicast;
+        for (size_t i = 0; i < filter_count; ++i) {
+            accepted |= memcmp(filters[i], frame, 6) == 0;
+        }
+        assert(accepted);
+    }
     const esp_netif_netstack_config_t *stack = wifi ? &router_ipv6_ap_stack : &router_ipv6_eth_stack;
     expected_source = wifi ? &ap : &wan;
     expected_target = target;
@@ -93,8 +121,10 @@ static void emit(esp_event_base_t base, int32_t id, void *data)
     handlers[base == WIFI_EVENT](NULL, base, id, data);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    (void)argv;
+    fail_multicast = argc > 1;
     assert(router_ipv6_init(NULL, &wan, &wan) == ESP_ERR_INVALID_ARG);
     mac_result = ESP_FAIL;
     assert(router_ipv6_init(&ap, &wan, &wan) == ESP_FAIL);
@@ -104,10 +134,11 @@ int main(void)
     for (int failure = 1; failure <= 2; ++failure) {
         registrations = 0; fail_registration = failure;
         assert(router_ipv6_init(&ap, &wan, &wan) == ESP_FAIL);
-        assert(!promiscuous && handlers[0] == NULL && handlers[1] == NULL);
+        assert(!promiscuous && !all_multicast && handlers[0] == NULL && handlers[1] == NULL);
     }
     fail_registration = registrations = 0;
-    assert(router_ipv6_init(&ap, &wan, &wan) == ESP_OK && promiscuous);
+    assert(router_ipv6_init(&ap, &wan, &wan) == ESP_OK);
+    assert(promiscuous == fail_multicast && all_multicast != fail_multicast);
     assert(router_ipv6_init(&ap, &wan, &wan) == ESP_ERR_INVALID_STATE);
     esp_eth_handle_t eth = &wan, other_eth = &ap;
     wifi_event_ap_staconnected_t station = {.aid = 1};
@@ -116,6 +147,9 @@ int main(void)
     receive(false, 62, NULL, false);
     emit(WIFI_EVENT, WIFI_EVENT_AP_START, NULL);
     emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
+    assert(filter_count == 1 && promiscuous == fail_multicast);
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
+    assert(filter_count == 1);
     emit(ETH_EVENT, ETHERNET_EVENT_CONNECTED, &other_eth);
     receive(false, 62, NULL, false);
     emit(ETH_EVENT, ETHERNET_EVENT_CONNECTED, &eth);
@@ -143,11 +177,60 @@ int main(void)
     station.aid = ESP_WIFI_MAX_CONN_NUM; emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
     receive(true, 62, &wan, false);
     emit(WIFI_EVENT, WIFI_EVENT_AP_STOP, NULL); receive(true, 62, NULL, false);
+    assert(filter_count == 0 && promiscuous == fail_multicast);
     emit(WIFI_EVENT, WIFI_EVENT_AP_START, NULL); receive(true, 62, NULL, false);
     packet(wan.mac, upstream); frame[12] = 8; frame[13] = 0;
     receive(false, 62, NULL, true); receive(true, 62, NULL, true);
     receive(false, 0, NULL, true); receive(false, 13, NULL, true);
     memcpy(frame, client, 6); receive(false, 62, NULL, false);
     memset(frame, 0xff, 6); frame[13] = 6; receive(false, 62, NULL, true);
+
+    station.aid = 1;
+    fail_add = true;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
+    assert(promiscuous && filter_count == 0);
+    packet(client, upstream); receive(false, 62, &ap, false);
+    fail_add = false;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
+    assert(promiscuous == fail_multicast && filter_count == 1);
+    fail_delete = true;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STOP, NULL);
+    assert(promiscuous && filter_count == 1);
+    fail_delete = false;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_START, NULL);
+    assert(promiscuous == fail_multicast && filter_count == 0);
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
+    assert(filter_count == 1);
+    filter_count = 0;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STOP, NULL);
+    assert(!filter_count && promiscuous == fail_multicast);
+    emit(WIFI_EVENT, WIFI_EVENT_AP_START, NULL);
+
+    for (uint8_t i = 0; i < 9; ++i) {
+        station.aid = i + 1;
+        station.mac[5] = i + 30;
+        emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
+        assert(filter_count == (i < 8 ? (size_t)i + 1 : 8));
+        assert(promiscuous == (fail_multicast || i == 8));
+    }
+    departed.aid = 1; departed.mac[5] = 30;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, &departed);
+    assert(filter_count == 8 && promiscuous == fail_multicast);
+    packet(station.mac, upstream); receive(false, 62, &ap, false);
+    station.aid = 1; station.mac[5] = 77;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
+    assert(filter_count == 8 && promiscuous);
+    departed.aid = 9; departed.mac[5] = 38;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, &departed);
+    assert(filter_count == 8 && promiscuous == fail_multicast);
+    packet(station.mac, upstream); receive(false, 62, &ap, false);
+    station.aid = 2; station.mac[5] = 99;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, &station);
+    assert(filter_count == 8 && promiscuous == fail_multicast);
+    departed.aid = 2; departed.mac[5] = 31;
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, &departed);
+    packet(station.mac, upstream); receive(false, 62, &ap, false);
+    emit(WIFI_EVENT, WIFI_EVENT_AP_STOP, NULL);
+    assert(filter_count == 0 && promiscuous == fail_multicast);
     return 0;
 }

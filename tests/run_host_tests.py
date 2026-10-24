@@ -55,6 +55,8 @@ def main() -> None:
                         "-o", str(output), *[f"-I{path}" for path in test_includes]]
             subprocess.run([compiler, *args, *map(str, sources)], env=env, cwd=temp, check=True)
             subprocess.run([str(output)], cwd=temp, check=True)
+            if name == "ipv6":
+                subprocess.run([str(output), "no-multicast"], cwd=temp, check=True)
             print(f"{name}: passed", flush=True)
 
 
