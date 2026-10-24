@@ -32,16 +32,18 @@ def main() -> None:
     if compiler is None:
         raise SystemExit("Set CC to a C compiler; Windows also supports MSVC installed with Build Tools.")
     msvc = Path(compiler).name.lower() in {"cl", "cl.exe"}
-    includes = [ROOT / "tests/host", IDF / "components/esp_common/include",
+    cjson = ROOT / "managed_components/espressif__cjson/cJSON"
+    includes = [ROOT / "tests/host", cjson, IDF / "components/esp_common/include",
                 IDF / "components/nvs_flash/include", ROOT / "build/config"]
     tests = {"subnet": [ROOT / "tests/test_subnet.c"],
              "config": [ROOT / "tests/test_config.c", ROOT / "main/router_config.c",
                         ROOT / "main/router_storage_config.c"],
              "auth": [ROOT / "tests/test_auth.c", ROOT / "main/router_auth.c"],
-             "ipv6": [ROOT / "tests/test_ipv6.c", ROOT / "main/router_ipv6.c"]}
+             "ipv6": [ROOT / "tests/test_ipv6.c", ROOT / "main/router_ipv6.c"],
+             "log": [ROOT / "tests/test_log.c", ROOT / "main/router_log.c", cjson / "cJSON.c"]}
     with tempfile.TemporaryDirectory(prefix="router-host-tests-") as temp:
         for name, sources in tests.items():
-            test_includes = ([ROOT / "tests/host/ipv6"] if name == "ipv6" else []) + includes
+            test_includes = ([ROOT / "tests/host" / name] if name in {"ipv6", "log"} else []) + includes
             output = Path(temp) / (name + (".exe" if os.name == "nt" else ""))
             if msvc:
                 args = ["/nologo", "/std:c17", "/W4", "/WX", "/MT", "/D_CRT_SECURE_NO_WARNINGS",
