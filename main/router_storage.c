@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -23,7 +24,7 @@ typedef struct {
 } storage_message_t;
 static QueueHandle_t queue;
 static SemaphoreHandle_t lock;
-static bool connected, mounted, busy, ready;
+static bool connected, mounted, busy, pending, ready, quiescing;
 static volatile bool unplugged;
 static uint32_t media;
 static uint64_t capacity, total, available;
@@ -57,7 +58,7 @@ static esp_err_t apply_action(const storage_message_t *message)
         connected = true; ++media;
         xSemaphoreGive(lock);
         unplugged = false;
-        result = router_disk_mount();
+        result = quiescing ? ESP_OK : router_disk_mount();
     } else if (message->action == DISCONNECT) {
         result = router_smb_stop();
         if (result == ESP_ERR_TIMEOUT) return result;
@@ -84,7 +85,7 @@ static esp_err_t apply_action(const storage_message_t *message)
         result = message->action == MOUNT ? router_disk_mount() : router_disk_unmount();
         if (result == ESP_OK && message->action == FORMAT) result = router_disk_format();
     }
-    if (router_disk_mounted() && config.enabled) {
+    if (router_disk_mounted() && config.enabled && !quiescing) {
         esp_err_t start = router_smb_start(&config);
         if (result == ESP_OK) result = start;
     }
@@ -98,7 +99,13 @@ static void storage_worker(void *arg)
         storage_message_t message;
         if (unplugged) {
             message = (storage_message_t){.action = DISCONNECT};
-            refresh_state(apply_action(&message));
+            esp_err_t result = apply_action(&message);
+            if (message.action <= CONFIGURE) {
+                xSemaphoreTake(lock, portMAX_DELAY);
+                pending = false;
+                xSemaphoreGive(lock);
+            }
+            refresh_state(result);
             vTaskDelay(pdMS_TO_TICKS(10));
         } else if (xQueueReceive(queue, &message, pdMS_TO_TICKS(5000)) == pdTRUE) {
             if (message.action == DISCONNECT && !router_disk_is(message.device)) continue;
@@ -160,4 +167,104 @@ esp_err_t router_storage_start(esp_netif_t *ap)
     ready = result == ESP_OK;
     if (!ready) snprintf(error, sizeof(error), "存储初始化失败 (%s)", esp_err_to_name(result));
     return result;
+}
+
+cJSON *router_storage_json(void)
+{
+    cJSON *json = cJSON_CreateObject();
+    if (!json) return NULL;
+    if (lock) xSemaphoreTake(lock, portMAX_DELAY);
+    cJSON_AddBoolToObject(json, "ready", ready);
+    cJSON_AddBoolToObject(json, "connected", connected && !unplugged);
+    cJSON_AddBoolToObject(json, "mounted", mounted && !unplugged);
+    cJSON_AddBoolToObject(json, "busy", busy || pending || quiescing);
+    cJSON_AddNumberToObject(json, "media", media);
+    cJSON_AddNumberToObject(json, "capacity", (double)capacity);
+    cJSON_AddNumberToObject(json, "total", (double)total);
+    cJSON_AddNumberToObject(json, "free", (double)available);
+    cJSON_AddStringToObject(json, "error", error);
+    cJSON_AddBoolToObject(json, "enabled", config.enabled);
+    cJSON_AddStringToObject(json, "share", config.share);
+    cJSON_AddStringToObject(json, "username", config.username);
+    cJSON_AddBoolToObject(json, "password_set", config.password[0] != 0);
+    cJSON_AddBoolToObject(json, "smb_running", router_smb_running());
+    if (lock) xSemaphoreGive(lock);
+    cJSON_AddNumberToObject(json, "psram_total", esp_psram_is_initialized() ? esp_psram_get_size() : 0);
+    cJSON_AddNumberToObject(json, "psram_free", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    return json;
+}
+
+static bool storage_field(const cJSON *json, const char *key, char *out, size_t size, bool keep_empty)
+{
+    const cJSON *field = cJSON_GetObjectItemCaseSensitive(json, key);
+    if (!cJSON_IsString(field) || strlen(field->valuestring) >= size) return false;
+    if (!keep_empty || field->valuestring[0]) strcpy(out, field->valuestring);
+    return true;
+}
+
+esp_err_t router_storage_request(const cJSON *request)
+{
+    if (!ready || !lock) return ESP_ERR_INVALID_STATE;
+    const cJSON *action = cJSON_GetObjectItemCaseSensitive(request, "action");
+    if (!cJSON_IsString(action)) return ESP_ERR_INVALID_ARG;
+    storage_message_t message = {0};
+    xSemaphoreTake(lock, portMAX_DELAY);
+    esp_err_t result = ESP_ERR_INVALID_ARG;
+    if (busy || pending || quiescing) result = ESP_ERR_INVALID_STATE;
+    else if (!strcmp(action->valuestring, "configure")) {
+        const cJSON *enabled = cJSON_GetObjectItemCaseSensitive(request, "enabled");
+        message.config = config;
+        message.config.enabled = cJSON_IsTrue(enabled);
+        if (cJSON_IsBool(enabled) && storage_field(request, "share", message.config.share, sizeof(message.config.share), false) &&
+            storage_field(request, "username", message.config.username, sizeof(message.config.username), false) &&
+            storage_field(request, "password", message.config.password, sizeof(message.config.password), true) &&
+            router_storage_config_valid(&message.config)) {
+            message.action = CONFIGURE;
+            result = ESP_OK;
+        }
+    } else if (connected && !unplugged) {
+        const cJSON *id = cJSON_GetObjectItemCaseSensitive(request, "media");
+        if (cJSON_IsNumber(id) && id->valuedouble == (double)media) {
+            message.media = media;
+            if (!strcmp(action->valuestring, "mount") && !mounted) message.action = MOUNT;
+            if (!strcmp(action->valuestring, "unmount")) message.action = UNMOUNT;
+            const cJSON *confirm = cJSON_GetObjectItemCaseSensitive(request, "confirm");
+            if (!strcmp(action->valuestring, "format") && cJSON_IsString(confirm) && !strcmp(confirm->valuestring, "FORMAT")) message.action = FORMAT;
+            if (message.action) result = ESP_OK;
+        }
+    }
+    if (result == ESP_OK) {
+        pending = true;
+        error[0] = 0;
+        if (xQueueSend(queue, &message, 0) != pdTRUE) { pending = false; result = ESP_ERR_INVALID_STATE; }
+    }
+    xSemaphoreGive(lock);
+    memset(&message, 0, sizeof(message));
+    return result;
+}
+
+esp_err_t router_storage_prepare_reboot(void)
+{
+    if (!ready) return ESP_OK;
+    xSemaphoreTake(lock, portMAX_DELAY);
+    if (busy || pending) { xSemaphoreGive(lock); return ESP_ERR_INVALID_STATE; }
+    quiescing = true;
+    bool needs_unmount = connected;
+    storage_message_t message = {.action = UNMOUNT, .media = media};
+    if (needs_unmount) pending = xQueueSend(queue, &message, 0) == pdTRUE;
+    xSemaphoreGive(lock);
+    for (unsigned i = 0; i < 1500; ++i) {
+        xSemaphoreTake(lock, portMAX_DELAY);
+        bool waiting = busy || pending;
+        bool failed = mounted || error[0];
+        xSemaphoreGive(lock);
+        if (!waiting) return needs_unmount && failed ? ESP_FAIL : ESP_OK;
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    return ESP_ERR_TIMEOUT;
+}
+
+void router_storage_cancel_reboot(void)
+{
+    if (lock) { xSemaphoreTake(lock, portMAX_DELAY); quiescing = false; xSemaphoreGive(lock); }
 }
