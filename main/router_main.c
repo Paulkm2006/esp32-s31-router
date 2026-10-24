@@ -10,6 +10,7 @@
 #include "router_ap.h"
 #include "router_config.h"
 #include "router_http.h"
+#include "router_ipv6.h"
 #include "router_status.h"
 
 static const char *TAG = "router";
@@ -99,6 +100,7 @@ void app_main(void)
     ESP_ERROR_CHECK(ethernet_init_all(&handles, &count));
     ESP_ERROR_CHECK(count == 1 ? ESP_OK : ESP_ERR_INVALID_STATE);
     esp_netif_config_t config = ESP_NETIF_DEFAULT_ETH();
+    config.stack = &router_ipv6_eth_stack;
     wan = esp_netif_new(&config);
     assert(wan != NULL);
     esp_eth_netif_glue_handle_t glue = esp_eth_new_netif_glue(handles[0]);
@@ -107,6 +109,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_set_hostname(wan, "esp32-s31-router"));
 
     ap = router_ap_init();
+    ESP_ERROR_CHECK(router_ipv6_init(ap, wan, handles[0]));
     ESP_ERROR_CHECK(router_status_init(ap, wan, handles[0]));
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, network_event, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, network_event, NULL));

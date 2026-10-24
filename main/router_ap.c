@@ -5,9 +5,11 @@
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "esp_wifi_default.h"
 #include "sdkconfig.h"
 #include "router_ap.h"
 #include "router_config.h"
+#include "router_ipv6.h"
 #include "router_subnet.h"
 
 _Static_assert(sizeof(CONFIG_ROUTER_AP_SSID) > 1 && sizeof(CONFIG_ROUTER_AP_SSID) <= 33,
@@ -33,8 +35,12 @@ static esp_netif_ip_info_t configured_lan(void)
 
 esp_netif_t *router_ap_init(void)
 {
-    s_ap = esp_netif_create_default_wifi_ap();
+    esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_AP();
+    netif_config.stack = &router_ipv6_ap_stack;
+    s_ap = esp_netif_new(&netif_config);
     assert(s_ap != NULL);
+    ESP_ERROR_CHECK(esp_netif_attach_wifi_ap(s_ap));
+    ESP_ERROR_CHECK(esp_wifi_set_default_wifi_ap_handlers());
     wifi_init_config_t init_config = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init_config));
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
