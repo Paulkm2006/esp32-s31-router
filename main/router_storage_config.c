@@ -6,9 +6,14 @@
 
 bool router_storage_config_valid(const router_storage_config_t *config)
 {
-    if (!config || !memchr(config->username, 0, sizeof(config->username)) ||
+    if (!config || !memchr(config->share, 0, sizeof(config->share)) || !config->share[0] ||
+        !memchr(config->username, 0, sizeof(config->username)) ||
         !memchr(config->password, 0, sizeof(config->password))) {
         return false;
+    }
+    for (const char *p = config->share; *p; ++p) {
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
+              (*p >= '0' && *p <= '9') || *p == '_' || *p == '-')) return false;
     }
     for (const char *p = config->username; *p; ++p) {
         if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') ||
@@ -32,7 +37,7 @@ typedef struct {
 
 esp_err_t router_storage_config_load(router_storage_config_t *config)
 {
-    *config = (router_storage_config_t){.username = "router"};
+    *config = (router_storage_config_t){.share = "usb", .username = "router"};
     nvs_handle_t handle;
     esp_err_t err = nvs_open("storage", NVS_READONLY, &handle);
     if (err == ESP_ERR_NVS_NOT_FOUND) {

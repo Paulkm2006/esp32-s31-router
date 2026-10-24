@@ -5,6 +5,7 @@
 
 typedef struct {
     bool enabled;
+    char share[33];
     char username[33];
     char password[64];
 } router_storage_config_t;
