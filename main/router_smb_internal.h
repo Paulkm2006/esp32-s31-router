@@ -2,6 +2,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 #include "ff.h"
 #include "smb2/smb2.h"
 #include "smb2/libsmb2.h"
@@ -10,6 +11,7 @@
 #define ROUTER_SMB_HANDLES 8
 #define ROUTER_SMB_BUFFER 32768
 #define ROUTER_SMB_PATH 1024
+#define ROUTER_SMB_FILE_TOO_LARGE 0xc0000904U
 typedef struct {
     bool used, directory, writable, readable, delete_pending;
     uint32_t access, sharing;

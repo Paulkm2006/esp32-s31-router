@@ -235,7 +235,7 @@ static int write_command(struct smb2_server *s, struct smb2_context *smb,
     if (!f) return router_smb_error(smb, SMB2_WRITE, SMB2_STATUS_FILE_CLOSED);
     if (f->directory || !f->writable) return router_smb_error(smb, SMB2_WRITE, SMB2_STATUS_ACCESS_DENIED);
     if (req->length > ROUTER_SMB_BUFFER || req->offset > UINT32_MAX || req->length > UINT32_MAX - req->offset)
-        return router_smb_error(smb, SMB2_WRITE, SMB2_STATUS_FILE_TOO_LARGE);
+        return router_smb_error(smb, SMB2_WRITE, ROUTER_SMB_FILE_TOO_LARGE);
     FRESULT result = extend_file(&f->file, (FSIZE_t)req->offset);
     UINT count = 0;
     if (result == FR_OK) result = f_write(&f->file, req->buf, req->length, &count);
@@ -261,7 +261,7 @@ static int set_info(struct smb2_server *s, struct smb2_context *smb, struct smb2
                 req->file_info_class == SMB2_FILE_ALLOCATION_INFORMATION) && req->buffer_length >= 8) {
         uint64_t size = router_smb_get(p, 8);
         if (f->directory || !f->writable) result = FR_DENIED;
-        else if (size > UINT32_MAX) return router_smb_error(smb, SMB2_SET_INFO, SMB2_STATUS_FILE_TOO_LARGE);
+        else if (size > UINT32_MAX) return router_smb_error(smb, SMB2_SET_INFO, ROUTER_SMB_FILE_TOO_LARGE);
         else if (req->file_info_class == SMB2_FILE_END_OF_FILE_INFORMATION || size < f_size(&f->file)) {
             result = extend_file(&f->file, size);
             if (result == FR_OK) result = f_truncate(&f->file);

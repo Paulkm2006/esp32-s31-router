@@ -74,7 +74,7 @@ static int tree_connect(struct smb2_server *s, struct smb2_context *smb,
 {
     (void)s;
     router_smb_client_t *client = smb2_get_opaque(smb);
-    const char *share = req->path ? strrchr(req->path, '\\') : NULL;
+    const char *share = req->path ? strrchr((const char *)req->path, '\\') : NULL;
     if (!client || !share || strcasecmp(share + 1, account.share))
         return router_smb_error(smb, SMB2_TREE_CONNECT, SMB2_STATUS_BAD_NETWORK_NAME);
     client->tree = true;
