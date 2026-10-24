@@ -6,7 +6,7 @@ function(router_smb_patch_sources target root)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/patched-smb3")
     foreach(source IN LISTS sources)
         get_filename_component(name "${source}" NAME)
-        if(name STREQUAL "libsmb2.c" OR name STREQUAL "unicode.c")
+        if(name STREQUAL "libsmb2.c" OR name STREQUAL "unicode.c" OR name STREQUAL "ntlmssp.c")
             file(READ "${root}/lib/${name}" content)
             if(name STREQUAL "libsmb2.c")
                 # A handler can queue its own reply, which releases the original request PDU.
@@ -17,6 +17,13 @@ function(router_smb_patch_sources target root)
                 # Custom CREATE replies need the same name cleanup as library-generated replies.
                 string(REPLACE "        if (pdu) {\n                if (req->name) {\n                        smb2_free_data(smb2, discard_const(req->name));\n                }\n"
                     "        if (req->name) {\n                smb2_free_data(smb2, discard_const(req->name));\n        }\n        if (pdu) {\n" content "${content}")
+            elseif(name STREQUAL "ntlmssp.c")
+                string(REPLACE "#include \"spnego-wrapper.h\"" "#include \"spnego-wrapper.h\"\n#include \"spnego_mic.h\"" content "${content}")
+                string(REPLACE "uint8_t exported_session_key[SMB2_KEY_SIZE];" "uint8_t exported_session_key[SMB2_KEY_SIZE];\n        router_spnego_mechs_t spnego_mechs;" content "${content}")
+                string(REPLACE "if (cmd == NEGOTIATE_MESSAGE) {\n                                if (encode_ntlm_challenge"
+                    "if (cmd == NEGOTIATE_MESSAGE) {\n                                if (auth_data->spnego_wrap && !router_spnego_mechlist(&auth_data->spnego_mechs, input_buf, input_len)) return -1;\n                                if (encode_ntlm_challenge" content "${content}")
+                string(REPLACE "smb2_spnego_wrap_authenticate_result(smb2,\n                                                                auth_data->is_authenticated, (void*)&spnego_buf)"
+                    "router_spnego_auth_result(&auth_data->spnego_mechs, input_buf, input_len, auth_data->exported_session_key, auth_data->is_authenticated, (void*)&spnego_buf)" content "${content}")
             else()
                 # NTLM strings may start at an odd offset in a network packet.
                 string(REPLACE "static int\nutf16_size" "static uint16_t read_utf16_unit(const uint16_t *p)\n{\n    uint16_t value;\n    memcpy(&value, p, sizeof(value));\n    return le16toh(value);\n}\n\nstatic int\nutf16_size" content "${content}")
@@ -40,4 +47,6 @@ function(router_smb_patch_sources target root)
         endif()
     endforeach()
     set_property(TARGET ${target} PROPERTY SOURCES "${patched_sources}")
+    target_sources(${target} PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/spnego_mic.c")
+    target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
 endfunction()

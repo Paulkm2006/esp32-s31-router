@@ -63,6 +63,8 @@ static void stop_server(int number) { (void)number; server.stop_requested = 1; }
 
 int main(void)
 {
+    extern void test_spnego_mic(void);
+    test_spnego_mic();
     image = tmpfile();
     assert(image && ftruncate(fileno(image), 64 * 1024 * 1024) == 0);
     uint8_t work[4096];
