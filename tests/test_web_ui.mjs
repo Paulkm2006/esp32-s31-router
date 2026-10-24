@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-const html = readFileSync(new URL('../main/web/ui/router_web.html', import.meta.url), 'utf8');
+const uiRoot = new URL('../main/web/ui/', import.meta.url);
+const html = readFileSync(new URL('router_web.html', uiRoot), 'utf8').replace(
+  /@UI_(\w+)@/g, (_, name) => readFileSync(new URL(name.replace(/_(css|js|html)$/, '.$1'), uiRoot), 'utf8'),
+);
+assert.doesNotMatch(html, /@UI_/);
 class Element {
   value = ''; textContent = ''; hidden = false; disabled = false; children = []; listeners = {}; attributes = {};
   open = false; scrollTop = 0; clientHeight = 300; scrollHeight = 600;
