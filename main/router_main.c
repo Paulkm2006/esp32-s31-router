@@ -12,6 +12,7 @@
 #include "router_http.h"
 #include "router_ipv6.h"
 #include "router_status.h"
+#include "router_storage.h"
 
 static const char *TAG = "router";
 static esp_netif_t *wan;
@@ -59,6 +60,8 @@ static void network_event(void *arg, esp_event_base_t base, int32_t id, void *da
         if (id == WIFI_EVENT_AP_START || id == WIFI_EVENT_AP_STOP) {
             ap_ready = id == WIFI_EVENT_AP_START;
             if (ap_ready && !http_started) {
+                esp_err_t storage = router_storage_start(ap);
+                if (storage != ESP_OK) ESP_LOGE(TAG, "Storage unavailable: %s", esp_err_to_name(storage));
                 ESP_ERROR_CHECK(router_http_start(ap));
                 http_started = true;
             }

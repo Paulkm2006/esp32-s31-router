@@ -11,6 +11,7 @@
 #include "router_config.h"
 #include "router_http.h"
 #include "router_status.h"
+#include "router_storage.h"
 
 _Static_assert(CONFIG_CJSON_NESTING_LIMIT <= 8, "Set cJSON maximum nesting depth to 8 or less");
 
@@ -104,7 +105,12 @@ static esp_err_t save_config(httpd_req_t *req, const cJSON *json)
         !router_config_valid(&config)) {
         return reply(req, "400 Bad Request", "{\"error\":\"配置无效，请检查名称、密码、私有网段、掩码和 DNS\"}");
     }
+    if (router_storage_prepare_reboot() != ESP_OK) {
+        router_storage_cancel_reboot();
+        return reply(req, "409 Conflict", "{\"error\":\"请等待存储操作完成，或安全卸载磁盘后重试\"}");
+    }
     if (router_config_save(&config) != ESP_OK) {
+        router_storage_cancel_reboot();
         return reply(req, "500 Internal Server Error", "{\"error\":\"保存失败，原配置保持有效\"}");
     }
     rebooting = true;
@@ -135,6 +141,12 @@ static esp_err_t handle_request(httpd_req_t *req)
     }
     if (req->method == HTTP_GET) {
         cJSON *status = router_status_json();
+        cJSON *storage = status ? router_storage_json() : NULL;
+        if (!storage || !cJSON_AddItemToObject(status, "storage", storage)) {
+            cJSON_Delete(storage);
+            cJSON_Delete(status);
+            status = NULL;
+        }
         char *body = status ? cJSON_PrintUnformatted(status) : NULL;
         esp_err_t result = reply(req, body ? "200 OK" : "500 Internal Server Error",
                                  body ? body : "{\"error\":\"读取状态失败，请稍后重试\"}");
@@ -157,6 +169,12 @@ static esp_err_t handle_request(httpd_req_t *req)
     } else if (is_route(req, "/api/logout")) {
         router_auth_logout(req);
         result = reply(req, "200 OK", "{}");
+    } else if (is_route(req, "/api/storage")) {
+        esp_err_t err = router_storage_request(json);
+        result = reply(req, err == ESP_OK ? "202 Accepted" : err == ESP_ERR_INVALID_ARG ? "400 Bad Request" : "409 Conflict",
+                       err == ESP_OK ? "{\"accepted\":true}" :
+                       err == ESP_ERR_INVALID_ARG ? "{\"error\":\"存储参数无效；启用 SMB 需设置用户名和 8–63 字节密码，格式化需输入 FORMAT\"}" :
+                       "{\"error\":\"存储正在操作、设备已改变或尚未就绪，请刷新后重试\"}");
     } else {
         result = save_config(req, json);
     }
@@ -181,6 +199,7 @@ esp_err_t router_http_start(esp_netif_t *ap)
     config.stack_size = 8192;
     config.lru_purge_enable = true;
     config.max_resp_headers = 10;
+    config.max_uri_handlers = 8;
     httpd_handle_t server;
     ESP_RETURN_ON_ERROR(httpd_start(&server, &config), "router_http", "start AP management server");
     const httpd_uri_t routes[] = {
@@ -189,6 +208,7 @@ esp_err_t router_http_start(esp_netif_t *ap)
         {.uri = "/api/login", .method = HTTP_POST, .handler = handle_request},
         {.uri = "/api/logout", .method = HTTP_POST, .handler = handle_request},
         {.uri = "/api/config", .method = HTTP_POST, .handler = handle_request},
+        {.uri = "/api/storage", .method = HTTP_POST, .handler = handle_request},
     };
     for (size_t i = 0; i < sizeof(routes) / sizeof(routes[0]); ++i) {
         ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &routes[i]), "router_http", "register management route");

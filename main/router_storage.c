@@ -99,6 +99,13 @@ static void storage_worker(void *arg)
         storage_message_t message;
         if (unplugged) {
             message = (storage_message_t){.action = DISCONNECT};
+            refresh_state(apply_action(&message));
+            vTaskDelay(pdMS_TO_TICKS(10));
+        } else if (xQueueReceive(queue, &message, pdMS_TO_TICKS(5000)) == pdTRUE) {
+            if (message.action == DISCONNECT && !router_disk_is(message.device)) continue;
+            xSemaphoreTake(lock, portMAX_DELAY);
+            busy = true;
+            xSemaphoreGive(lock);
             esp_err_t result = apply_action(&message);
             if (message.action <= CONFIGURE) {
                 xSemaphoreTake(lock, portMAX_DELAY);
@@ -106,13 +113,6 @@ static void storage_worker(void *arg)
                 xSemaphoreGive(lock);
             }
             refresh_state(result);
-            vTaskDelay(pdMS_TO_TICKS(10));
-        } else if (xQueueReceive(queue, &message, pdMS_TO_TICKS(5000)) == pdTRUE) {
-            if (message.action == DISCONNECT && !router_disk_is(message.device)) continue;
-            xSemaphoreTake(lock, portMAX_DELAY);
-            busy = true;
-            xSemaphoreGive(lock);
-            refresh_state(apply_action(&message));
             memset(&message, 0, sizeof(message));
         } else {
             uint64_t size, free_bytes;
