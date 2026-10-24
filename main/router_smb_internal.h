@@ -15,6 +15,7 @@ typedef struct {
     uint32_t access, sharing;
     smb2_file_id id;
     char path[ROUTER_SMB_PATH];
+    char pattern[ROUTER_SMB_PATH];
     FIL file;
     FF_DIR dir;
     FILINFO entry;
