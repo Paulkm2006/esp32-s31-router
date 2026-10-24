@@ -7,4 +7,5 @@ idf_component_register(SRCS "router_main.c" "router_ap.c" "router_config.c"
                        INCLUDE_DIRS "."
                        EMBED_TXTFILES "router_web.html")
 idf_component_get_property(fatfs_lib fatfs COMPONENT_LIB)
-target_compile_options(${fatfs_lib} PUBLIC -include "${CMAKE_CURRENT_LIST_DIR}/router_fatfs_config.h")
+target_compile_options(${fatfs_lib} PUBLIC "$<$<COMPILE_LANGUAGE:C,CXX>:-include>"
+    "$<$<COMPILE_LANGUAGE:C,CXX>:${CMAKE_CURRENT_LIST_DIR}/router_fatfs_config.h>")

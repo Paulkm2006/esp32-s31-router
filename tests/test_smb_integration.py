@@ -6,6 +6,7 @@ import uuid
 import smbclient
 from smbprotocol.connection import Connection
 from smbprotocol import Dialects
+from smbprotocol.exceptions import LogonFailure
 
 SERVER = os.environ.get("SMB_TEST_SERVER", "127.0.0.1")
 ROOT = rf"\\{SERVER}\usb"
@@ -16,12 +17,12 @@ def main() -> None:
     try:
         smbclient.register_session(SERVER, username="testuser", password="wrong-password", port=1445,
                                    require_signing=True, connection_timeout=5)
-    except Exception:
+    except LogonFailure:
         pass
     else:
         raise AssertionError("Incorrect password was accepted")
     smbclient.reset_connection_cache()
-    session = smbclient.register_session(SERVER, username="testuser", password="test-password", port=1445,
+    session = smbclient.register_session(SERVER, username="testuser", password="测试-Password1!", port=1445,
                                          require_signing=True, connection_timeout=5)
     assert session.connection.dialect >= Dialects.SMB_3_0_0
     assert session.connection.require_signing
@@ -35,6 +36,7 @@ def main() -> None:
         stream.write(b"end")
         stream.flush()
     assert smbclient.stat(path, **KW).st_size == 4099
+    assert smbclient.stat(path, **KW).st_ino == smbclient.stat(path, **KW).st_ino
     with smbclient.open_file(path, mode="rb", **KW) as stream:
         assert stream.read() == b"hello" + bytes(4091) + b"end"
     with smbclient.open_file(path, mode="r+b", **KW) as stream:

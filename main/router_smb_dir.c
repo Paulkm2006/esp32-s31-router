@@ -71,6 +71,7 @@ static int query_directory(struct smb2_server *s, struct smb2_context *smb,
             router_smb_put(p + 56, f->entry.fattrib & AM_DIR ? SMB2_FILE_ATTRIBUTE_DIRECTORY : SMB2_FILE_ATTRIBUTE_ARCHIVE, 4);
         }
         router_smb_put(p + (base == 12 ? 8 : 60), bytes, 4);
+        if (base == 104 || base == 80) router_smb_put(p + base - 8, router_smb_file_number(f->path, f->entry.fname), 8);
         memcpy(p + base, name->val, bytes);
         free(name);
         used += len;

@@ -6,7 +6,7 @@
 
 bool router_storage_config_valid(const router_storage_config_t *config)
 {
-    if (!config || !memchr(config->share, 0, sizeof(config->share)) || !config->share[0] ||
+    if (!config || config->enabled > 1 || !memchr(config->share, 0, sizeof(config->share)) || !config->share[0] ||
         !memchr(config->username, 0, sizeof(config->username)) ||
         !memchr(config->password, 0, sizeof(config->password))) {
         return false;

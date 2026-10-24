@@ -110,6 +110,8 @@ int main(void)
     commit_result = ESP_OK;
     router_storage_config_t storage;
     CHECK(router_storage_config_load(&storage) == ESP_OK && !storage.enabled);
+    storage.enabled = 2;
+    CHECK(!router_storage_config_valid(&storage));
     storage.enabled = true;
     CHECK(!router_storage_config_valid(&storage));
     strcpy(storage.password, "Storage-secret!");

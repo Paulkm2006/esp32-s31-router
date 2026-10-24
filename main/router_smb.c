@@ -19,7 +19,6 @@ static struct smb2_server_request_handlers handlers;
 static struct ifreq ap_interface;
 static SemaphoreHandle_t stopped;
 static volatile bool active, bound;
-static esp_err_t serve_result;
 static router_storage_config_t account;
 
 static void bind_interface(struct smb2_server *s, fd_set *read, fd_set *write, int *maxfd)
@@ -104,10 +103,10 @@ static int echo(struct smb2_server *s, struct smb2_context *smb) { (void)s; (voi
 static void serve(void *arg)
 {
     (void)arg;
-    serve_result = smb2_serve_port(&server, 2, connected, NULL) < 0 ? ESP_FAIL : ESP_OK;
+    if (smb2_serve_port(&server, 2, connected, NULL) < 0) ESP_LOGW("smb3", "SMB listener stopped after an error");
     for (unsigned i = 0; i < 2; ++i) {
         router_smb_clients[i].context = NULL;
-        if (router_smb_cleanup(&router_smb_clients[i]) != FR_OK) serve_result = ESP_FAIL;
+        if (router_smb_cleanup(&router_smb_clients[i]) != FR_OK) ESP_LOGW("smb3", "File close failed; safe unmount must retry");
     }
     active = bound = false;
     xSemaphoreGive(stopped);
@@ -118,6 +117,7 @@ esp_err_t router_smb_init(esp_netif_t *ap)
 {
     stopped = xSemaphoreCreateBinary();
     if (!stopped) return ESP_ERR_NO_MEM;
+    xSemaphoreGive(stopped);
     return esp_netif_get_netif_impl_name(ap, ap_interface.ifr_name);
 }
 
@@ -129,6 +129,7 @@ esp_err_t router_smb_stop(void)
     if (active) {
         server.stop_requested = 1;
         if (xSemaphoreTake(stopped, pdMS_TO_TICKS(10000)) != pdTRUE) return ESP_ERR_TIMEOUT;
+        xSemaphoreGive(stopped);
     }
     if (router_smb_clients) for (unsigned i = 0; i < 2; ++i)
         if (router_smb_cleanup(&router_smb_clients[i]) != FR_OK) return ESP_FAIL;
@@ -141,7 +142,8 @@ esp_err_t router_smb_start(const router_storage_config_t *config)
     if (!router_smb_clients) router_smb_clients = heap_caps_calloc(2, sizeof(*router_smb_clients), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!router_smb_buffer) router_smb_buffer = heap_caps_malloc(ROUTER_SMB_BUFFER, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!router_smb_clients || !router_smb_buffer) return ESP_ERR_NO_MEM;
-    xSemaphoreTake(stopped, 0);
+    // Taking the idle token also excludes the interval before the old task signals completion.
+    if (xSemaphoreTake(stopped, 0) != pdTRUE) return ESP_ERR_INVALID_STATE;
     account = *config;
     handlers = (struct smb2_server_request_handlers){.authorize_user = authorize, .destruction_event = destroy,
         .tree_connect_cmd = tree_connect, .tree_disconnect_cmd = tree_disconnect, .logoff_cmd = logoff,
@@ -158,6 +160,7 @@ esp_err_t router_smb_start(const router_storage_config_t *config)
     active = true;
     if (xTaskCreate(serve, "smb3", 16384, NULL, 3, NULL) != pdPASS) {
         active = false;
+        xSemaphoreGive(stopped);
         return ESP_ERR_NO_MEM;
     }
     for (unsigned i = 0; i < 200 && active && !router_smb_running(); ++i) vTaskDelay(pdMS_TO_TICKS(10));

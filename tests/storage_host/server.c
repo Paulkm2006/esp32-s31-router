@@ -88,7 +88,7 @@ int main(void)
     router_smb_clients = calloc(2, sizeof(*router_smb_clients));
     router_smb_buffer = malloc(ROUTER_SMB_BUFFER);
     assert(router_smb_clients && router_smb_buffer);
-    account = (router_storage_config_t){.enabled = true, .share = "usb", .username = "testuser", .password = "test-password"};
+    account = (router_storage_config_t){.enabled = true, .share = "usb", .username = "testuser", .password = "测试-Password1!"};
     handlers = (struct smb2_server_request_handlers){.authorize_user = authorize, .destruction_event = destroy,
         .tree_connect_cmd = tree_connect, .tree_disconnect_cmd = tree_disconnect, .logoff_cmd = logoff,
         .session_established = echo, .echo_cmd = echo};

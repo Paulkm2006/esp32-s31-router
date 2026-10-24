@@ -29,6 +29,20 @@ uint64_t router_smb_timestamp(const FILINFO *info)
     return ((uint64_t)mktime(&tm) + 11644473600ULL) * 10000000ULL;
 }
 
+uint64_t router_smb_file_number(const char *path, const char *child)
+{
+    uint64_t number = 14695981039346656037ULL;
+    const char *parts[] = {path, child};
+    for (unsigned part = 0; part < 2 && parts[part]; ++part) {
+        if (part && path[strlen(path) - 1] != '/') number = (number ^ '/') * 1099511628211ULL;
+        struct smb2_utf16 *name = smb2_utf8_to_utf16(parts[part]);
+        if (!name) return 0;
+        for (int i = 0; i < name->len; ++i) number = (number ^ ff_wtoupper(name->val[i])) * 1099511628211ULL;
+        free(name);
+    }
+    return number ? number : 1;
+}
+
 static size_t utf16(uint8_t *out, const char *name)
 {
     struct smb2_utf16 *u = smb2_utf8_to_utf16(name);
@@ -71,7 +85,7 @@ static int query_info(struct smb2_server *server, struct smb2_context *smb,
         switch (req->file_info_class) {
         case SMB2_FILE_BASIC_INFORMATION: basic_info(p, &info); len = 40; break;
         case SMB2_FILE_STANDARD_INFORMATION: standard_info(p, &info, file->delete_pending); len = 24; break;
-        case SMB2_FILE_INTERNAL_INFORMATION: memcpy(p, file->id, 8); len = 8; break;
+        case SMB2_FILE_INTERNAL_INFORMATION: router_smb_put(p, router_smb_file_number(file->path, NULL), 8); len = 8; break;
         case SMB2_FILE_EA_INFORMATION: len = 4; break;
         case SMB2_FILE_ACCESS_INFORMATION: router_smb_put(p, 0x1f01ff, 4); len = 4; break;
         case SMB2_FILE_POSITION_INFORMATION: router_smb_put(p, file->directory ? 0 : f_tell(&file->file), 8); len = 8; break;
@@ -79,7 +93,7 @@ static int query_info(struct smb2_server *server, struct smb2_context *smb,
         case SMB2_FILE_ATTRIBUTE_TAG_INFORMATION: basic_info(p, &info); memmove(p, p + 32, 4); memset(p + 4, 0, 4); len = 8; break;
         case SMB2_FILE_ALL_INFORMATION:
             basic_info(p, &info); standard_info(p + 40, &info, file->delete_pending);
-            memcpy(p + 64, file->id, 8); router_smb_put(p + 76, 0x1f01ff, 4);
+            router_smb_put(p + 64, router_smb_file_number(file->path, NULL), 8); router_smb_put(p + 76, 0x1f01ff, 4);
             router_smb_put(p + 80, file->directory ? 0 : f_tell(&file->file), 8);
             len = utf16(p + 100, file->path + 2); router_smb_put(p + 96, len, 4); len += 100; break;
         case SMB2_FILE_NAME_INFORMATION: case SMB2_FILE_NORMALIZED_NAME_INFORMATION:

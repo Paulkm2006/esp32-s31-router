@@ -14,3 +14,5 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE HAVE_CONFIG_H
     arc4random_buf=esp_fill_random gethostname=router_smb_gethostname "_U_=__attribute__((unused))")
 target_compile_options(${COMPONENT_LIB} PRIVATE -include esp_random.h
     -Wno-error=implicit-fallthrough -Wno-error=type-limits)
+include("${CMAKE_CURRENT_LIST_DIR}/patch_sources.cmake")
+router_smb_patch_sources(${COMPONENT_LIB} "${SMB_ROOT}")

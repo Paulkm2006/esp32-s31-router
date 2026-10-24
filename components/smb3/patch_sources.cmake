@@ -1,0 +1,43 @@
+# Keep the pinned upstream checkout untouched; compile the same fixes on the MCU and host.
+function(router_smb_patch_sources target root)
+    get_target_property(source_dir ${target} SOURCE_DIR)
+    get_target_property(sources ${target} SOURCES)
+    set(patched_sources)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/patched-smb3")
+    foreach(source IN LISTS sources)
+        get_filename_component(name "${source}" NAME)
+        if(name STREQUAL "libsmb2.c" OR name STREQUAL "unicode.c")
+            file(READ "${root}/lib/${name}" content)
+            if(name STREQUAL "libsmb2.c")
+                # A handler can queue its own reply, which releases the original request PDU.
+                string(REGEX REPLACE "struct (smb2_[a-z0-9_]+_request) \\*req = command_data;"
+                    "struct \\1 request_copy = {0};\n        struct \\1 *req = command_data;\n        if (req) { request_copy = *req; req = &request_copy; }" content "${content}")
+                string(REPLACE "memcpy(input_key, derivation_key, MIN(sizeof(input_key),"
+                    "if (derivation_key_len) memcpy(input_key, derivation_key, MIN(sizeof(input_key)," content "${content}")
+                # Custom CREATE replies need the same name cleanup as library-generated replies.
+                string(REPLACE "        if (pdu) {\n                if (req->name) {\n                        smb2_free_data(smb2, discard_const(req->name));\n                }\n"
+                    "        if (req->name) {\n                smb2_free_data(smb2, discard_const(req->name));\n        }\n        if (pdu) {\n" content "${content}")
+            else()
+                # NTLM strings may start at an odd offset in a network packet.
+                string(REPLACE "static int\nutf16_size" "static uint16_t read_utf16_unit(const uint16_t *p)\n{\n    uint16_t value;\n    memcpy(&value, p, sizeof(value));\n    return le16toh(value);\n}\n\nstatic int\nutf16_size" content "${content}")
+                string(REPLACE "le16toh(*utf16++)" "read_utf16_unit(utf16++)" content "${content}")
+                string(REPLACE "le16toh(*utf16)" "read_utf16_unit(utf16)" content "${content}")
+            endif()
+            set(output "${CMAKE_CURRENT_BINARY_DIR}/patched-smb3/${name}")
+            if(EXISTS "${output}")
+                file(READ "${output}" previous)
+            else()
+                set(previous "")
+            endif()
+            if(NOT content STREQUAL previous)
+                file(WRITE "${output}" "${content}")
+            endif()
+            list(APPEND patched_sources "${output}")
+        elseif(IS_ABSOLUTE "${source}")
+            list(APPEND patched_sources "${source}")
+        else()
+            list(APPEND patched_sources "${source_dir}/${source}")
+        endif()
+    endforeach()
+    set_property(TARGET ${target} PROPERTY SOURCES "${patched_sources}")
+endfunction()

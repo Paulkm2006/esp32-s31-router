@@ -63,8 +63,9 @@ router_smb_file_t *router_smb_file(struct smb2_context *smb, const smb2_file_id 
 {
     router_smb_client_t *client = smb2_get_opaque(smb);
     if (!client || !client->tree) return NULL;
-    static const uint8_t related[16] = {[0 ... 15] = 255};
-    if (!memcmp(id, related, 16)) return client->last && client->last->used ? client->last : NULL;
+    bool related = true;
+    for (unsigned i = 0; i < 16; ++i) related = related && id[i] == 255;
+    if (related) return client->last && client->last->used ? client->last : NULL;
     for (unsigned i = 0; i < ROUTER_SMB_HANDLES; ++i) {
         if (client->files[i].used && !memcmp(client->files[i].id, id, 16)) return &client->files[i];
     }
@@ -299,6 +300,11 @@ static int set_info(struct smb2_server *s, struct smb2_context *smb, struct smb2
                 bool pending = f->delete_pending;
                 f->delete_pending = false;
                 result = close_file(f);
+                if (result != FR_OK) {
+                    f->delete_pending = pending;
+                    return router_smb_result(smb, SMB2_SET_INFO, result);
+                }
+                // shortcut: FatFs cannot atomically replace a target; reject replacements until the backend supports them.
                 if (result == FR_OK) result = f_rename(f->path, path);
                 if (result == FR_OK) strcpy(f->path, path);
                 FRESULT reopened = f->directory ? f_opendir(&f->dir, f->path) : f_open(&f->file, f->path, FA_READ | (f->writable ? FA_WRITE : 0));

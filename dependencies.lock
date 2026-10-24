@@ -208,6 +208,6 @@ direct_dependencies:
 - espressif/ethernet_init
 - espressif/usb_host_msc
 - idf
-manifest_hash: c90ccabd86a923a99bc3ed960fcea0da86a711ca81728da92749e629118bf4bd
+manifest_hash: 2a25b0cde985bcd5c0581462ea1060178cfb8220b44d053b818eb30ed5c9cd78
 target: esp32s31
 version: 3.0.0

@@ -24,6 +24,7 @@ typedef int BaseType_t;
 #define pdTRUE 1
 #define pdPASS 1
 #define pdMS_TO_TICKS(x) (x)
+#define ESP_LOGW(...) ((void)0)
 void *heap_caps_calloc(size_t n, size_t size, unsigned caps);
 void *heap_caps_malloc(size_t size, unsigned caps);
 void esp_fill_random(void *data, size_t size);
