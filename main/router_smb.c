@@ -74,8 +74,13 @@ static int tree_connect(struct smb2_server *s, struct smb2_context *smb,
 {
     (void)s;
     router_smb_client_t *client = smb2_get_opaque(smb);
-    const char *share = req->path ? strrchr((const char *)req->path, '\\') : NULL;
-    if (!client || !share || strcasecmp(share + 1, account.share))
+    if (!req->path || (req->path_length & 1) || req->path_length > 2048)
+        return router_smb_error(smb, SMB2_TREE_CONNECT, SMB2_STATUS_BAD_NETWORK_NAME);
+    const char *path = smb2_utf16_to_utf8(req->path, req->path_length / 2);
+    const char *share = path ? strrchr(path, '\\') : NULL;
+    bool valid = client && share && !strcasecmp(share + 1, account.share);
+    free((void *)path);
+    if (!valid)
         return router_smb_error(smb, SMB2_TREE_CONNECT, SMB2_STATUS_BAD_NETWORK_NAME);
     client->tree = true;
     rep->share_type = SMB2_SHARE_TYPE_DISK;
@@ -139,7 +144,8 @@ esp_err_t router_smb_start(const router_storage_config_t *config)
     xSemaphoreTake(stopped, 0);
     account = *config;
     handlers = (struct smb2_server_request_handlers){.authorize_user = authorize, .destruction_event = destroy,
-        .tree_connect_cmd = tree_connect, .tree_disconnect_cmd = tree_disconnect, .logoff_cmd = logoff, .echo_cmd = echo};
+        .tree_connect_cmd = tree_connect, .tree_disconnect_cmd = tree_disconnect, .logoff_cmd = logoff,
+        .session_established = echo, .echo_cmd = echo};
     router_smb_file_handlers(&handlers);
     router_smb_info_handlers(&handlers);
     router_smb_dir_handlers(&handlers);
