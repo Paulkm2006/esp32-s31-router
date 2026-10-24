@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 #include "router_auth.h"
 #include "router_config.h"
 #include "router_http.h"
+#include "router_log.h"
 #include "router_status.h"
 #include "router_storage.h"
 
@@ -29,6 +31,31 @@ static esp_err_t reply(httpd_req_t *req, const char *status, const char *body)
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
     return httpd_resp_sendstr(req, body);
+}
+
+static esp_err_t read_logs(httpd_req_t *req)
+{
+    uint64_t after = 0;
+    if (httpd_req_get_url_query_len(req)) {
+        char query[64], value[32], *end;
+        if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+            httpd_query_key_value(query, "after", value, sizeof(value)) != ESP_OK ||
+            !value[0] || strspn(value, "0123456789") != strlen(value)) {
+            return reply(req, "400 Bad Request", "{\"error\":\"日志游标无效\"}");
+        }
+        errno = 0;
+        after = strtoull(value, &end, 10);
+        if (errno || *end || after > 9007199254740991ULL) {
+            return reply(req, "400 Bad Request", "{\"error\":\"日志游标无效\"}");
+        }
+    }
+    cJSON *json = router_log_json(after);
+    char *body = json ? cJSON_PrintUnformatted(json) : NULL;
+    esp_err_t result = reply(req, body ? "200 OK" : "503 Service Unavailable",
+                             body ? body : "{\"error\":\"日志缓存不可用或内存不足\"}");
+    free(body);
+    cJSON_Delete(json);
+    return result;
 }
 
 static bool is_route(const httpd_req_t *req, const char *path)
@@ -140,6 +167,7 @@ static esp_err_t handle_request(httpd_req_t *req)
         return reply(req, "503 Service Unavailable", "{\"error\":\"配置已保存，设备正在重启\"}");
     }
     if (req->method == HTTP_GET) {
+        if (is_route(req, "/api/logs")) return read_logs(req);
         cJSON *status = router_status_json();
         cJSON *storage = status ? router_storage_json() : NULL;
         if (!storage || !cJSON_AddItemToObject(status, "storage", storage)) {
@@ -205,6 +233,7 @@ esp_err_t router_http_start(esp_netif_t *ap)
     const httpd_uri_t routes[] = {
         {.uri = "/", .method = HTTP_GET, .handler = handle_request},
         {.uri = "/api/status", .method = HTTP_GET, .handler = handle_request},
+        {.uri = "/api/logs", .method = HTTP_GET, .handler = handle_request},
         {.uri = "/api/login", .method = HTTP_POST, .handler = handle_request},
         {.uri = "/api/logout", .method = HTTP_POST, .handler = handle_request},
         {.uri = "/api/config", .method = HTTP_POST, .handler = handle_request},

@@ -5,6 +5,7 @@ import vm from 'node:vm';
 const html = readFileSync(new URL('../main/router_web.html', import.meta.url), 'utf8');
 class Element {
   value = ''; textContent = ''; hidden = false; disabled = false; children = []; listeners = {}; attributes = {};
+  open = false; scrollTop = 0; clientHeight = 300; scrollHeight = 600;
   addEventListener(name, handler) { this.listeners[name] = handler; }
   append(child) { this.children.push(child); }
   replaceChildren() { this.children = []; }
@@ -33,6 +34,7 @@ await new Promise(setImmediate);
 assert.equal($('login-panel').hidden, false);
 assert.equal($('dashboard').hidden, true);
 assert.equal(intervals.size, 0);
+assert.equal(requests.some(request => request.path.startsWith('/api/logs')), false);
 assert.equal(vm.runInContext('duration(null)', context), '暂不可用');
 assert.equal(vm.runInContext('duration(0)', context), '0 秒');
 assert.equal(vm.runInContext('duration(90061)', context), '1 天 1 小时 1 分 1 秒');
@@ -66,6 +68,48 @@ assert.equal($('storage-address').textContent, '\\\\192.168.4.1\\usb');
 assert.equal($('storage-mount').disabled, true);
 assert.equal($('storage-unmount').disabled, false);
 assert.equal($('smb-password').value, '');
+assert.equal(requests.some(request => request.path.startsWith('/api/logs')), false, 'Closed logs must not poll.');
+const logPages = [
+  {first:0, next:2, reset:false, more:true, entries:[{id:0, text:'\x1b[31mfirst\x1b[0m\n'}, {id:1, text:'<img src=x onerror=alert(1)>\n'}]},
+  {first:0, next:3, reset:false, more:false, entries:[{id:2, text:'third\n'}]},
+];
+handleRequest = path => path.startsWith('/api/logs') ? {status:200, data:logPages.shift()} : {status:200, data:status};
+$('logs-panel').open = true;
+await $('logs-panel').listeners.toggle();
+assert.equal(requests.at(-1).path, '/api/logs?after=2');
+assert.equal($('logs-content').textContent, 'first\n<img src=x onerror=alert(1)>\nthird\n');
+assert.equal($('logs-content').scrollTop, 600);
+$('logs-content').scrollTop = 0;
+handleRequest = () => ({status:200, data:{first:2, next:4, reset:false, more:false, entries:[{id:3, text:'fourth\n'}]}});
+await vm.runInContext('refreshLogs()', context);
+assert.equal($('logs-content').textContent, 'third\nfourth\n', 'Expired records must leave the browser too.');
+assert.equal($('logs-content').scrollTop, 0, 'Polling must preserve a user reading older logs.');
+handleRequest = () => ({status:200, data:{first:10, next:11, reset:true, more:false, entries:[{id:10, text:'after overflow\n'}]}});
+await vm.runInContext('refreshLogs()', context);
+assert.equal($('logs-content').textContent, 'after overflow\n');
+handleRequest = () => ({status:503, data:{error:'日志缓存不可用或内存不足'}});
+await vm.runInContext('refreshLogs()', context);
+assert.equal($('logs-error').hidden, false);
+assert.equal($('logs-content').textContent, 'after overflow\n');
+let resolveLogs;
+handleRequest = () => new Promise(resolve => { resolveLogs = resolve; });
+const staleLogs = vm.runInContext('refreshLogs()', context);
+await vm.runInContext('refreshLogs()', context);
+handleRequest = () => ({status:200, data:{}});
+await $('logout').listeners.click();
+assert.equal($('logs-content').textContent, '');
+resolveLogs({status:200, data:{first:10, next:12, reset:false, more:false, entries:[{id:11, text:'private old response'}]}});
+await staleLogs;
+assert.equal($('logs-content').textContent, '', 'An old log request must not restore logs after logout.');
+handleRequest = path => ({status:200, data:path === '/api/status' ? status : {}});
+await submit('login-form');
+$('logs-panel').open = true;
+handleRequest = () => ({status:401, data:{error:'请登录。'}});
+await vm.runInContext('refreshLogs()', context);
+assert.equal($('dashboard').hidden, true);
+assert.equal(intervals.size, 0);
+handleRequest = path => ({status:200, data:path === '/api/status' ? status : {}});
+await submit('login-form');
 $('ssid').value = 'unsaved edit';
 await vm.runInContext('refresh()', context);
 assert.equal($('ssid').value, 'unsaved edit', 'Polling must preserve unsaved settings.');
@@ -149,9 +193,10 @@ assert.equal($('new-ssid').textContent, '新网络');
 assert.equal($('new-url').attributes.href, 'http://192.168.5.1/');
 assert.equal($('settings').hidden, true);
 assert.equal($('storage-panel').hidden, true);
+assert.equal($('logs-panel').hidden, true);
 assert.equal($('password').value, '');
 assert.equal(intervals.size, 0);
 resolveStatus({status:200, data:status}); await staleRefresh;
 assert.equal($('logout').hidden, true, 'An old refresh must not restore controls after reboot starts.');
 assert.equal(intervals.size, 0);
-console.log('Web UI checks passed: login, safe rendering, polling, validation and reconnect flow.');
+console.log('Web UI checks passed: login, logs, safe rendering, polling, validation and reconnect flow.');

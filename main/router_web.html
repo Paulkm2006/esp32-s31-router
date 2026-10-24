@@ -9,6 +9,7 @@
 :root{font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#16302f;background:#f3f6f5;font-synthesis:none;line-height:1.5}
 *{box-sizing:border-box}body{margin:0}button,input{font:inherit}button,a,input{touch-action:manipulation}button{cursor:pointer;border:0;border-radius:9px;padding:11px 18px;font-weight:650;background:#087c70;color:#fff}button:hover{background:#05665d}button:disabled{opacity:.6;cursor:wait}button.secondary{background:#e9f1ef;color:#25564f}a{color:#087c70;overflow-wrap:anywhere}:focus-visible{outline:3px solid #e8a147;outline-offset:3px}[hidden]{display:none!important}
 header{background:#fff;border-bottom:1px solid #dce6e2}header>div{max-width:1080px;margin:auto;padding:22px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}.brand{display:flex;align-items:center;gap:12px}.logo{display:grid;place-items:center;width:42px;height:42px;background:#087c70;border-radius:12px;color:#fff;font-size:23px;font-weight:700}h1{font-size:20px;letter-spacing:.02em;margin:0}.eyebrow{font-size:11px;letter-spacing:.14em;color:#68807b;margin:0 0 2px}main{max-width:1080px;padding:30px 24px 48px;margin:auto}h2{font-size:18px;margin:0 0 18px}h3{font-size:15px;margin:0 0 12px}.muted,.hint{color:#647b76;font-size:13px}.hint{margin:6px 0 0}.card{border:1px solid #dce6e2;border-radius:16px;background:#fff;padding:24px;box-shadow:0 4px 18px #16302f04}.intro{margin-bottom:24px}.intro h2{font-size:26px;margin:0 0 4px}.intro p{margin:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}.card-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.card-title h2{margin:0}.badge{font-size:12px;padding:4px 10px;background:#eff3f2;border-radius:999px;color:#647b76;white-space:nowrap}.badge.good{background:#e2f4eb;color:#167247}.stats{display:grid;grid-template-columns:auto 1fr;gap:10px 20px;font-size:14px;margin:0}.stats dt{color:#647b76}.stats dd{margin:0;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:14px}th{text-align:left;font-size:12px;font-weight:500;color:#647b76;border-bottom:1px solid #e4ebe8;padding:0 16px 12px 0}td{padding:14px 16px 14px 0;border-bottom:1px solid #eef2f0;font-variant-numeric:tabular-nums}tr:last-child td{border-bottom:0}.empty{text-align:center;padding:24px;color:#647b76}.devices{margin-bottom:20px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:18px 24px}label{display:block;font-size:14px;font-weight:600;margin-bottom:7px}input{display:block;width:100%;min-width:0;border:1px solid #cbdad4;background:#fff;color:#16302f;border-radius:8px;padding:10px 12px}input::placeholder{color:#84958f}fieldset{border:0;padding:0;margin:0 0 24px}legend{padding:0;margin-bottom:14px;font-weight:650}.actions{display:flex;align-items:center;gap:16px;margin-top:24px}.actions p{margin:0}.login{max-width:420px;margin:7vh auto}.login p{margin:0 0 22px}.login button{width:100%;margin-top:20px}.error{color:#a7352b;font-size:14px;margin-top:14px!important}.notice{border:1px solid #b7d8cb;background:#edf8f2;border-radius:12px;padding:20px;margin-bottom:20px}.notice p{margin:6px 0}.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#203c36;color:#fff;padding:12px 20px;border-radius:10px;box-shadow:0 6px 24px #0002;max-width:calc(100% - 32px);width:max-content;font-size:14px;z-index:2}.refresh{display:flex;gap:8px;align-items:center}.dot{width:6px;height:6px;border-radius:50%;background:#469b78}
+summary{cursor:pointer;font-size:18px;font-weight:650}details[open]>summary{margin-bottom:16px}.log-output{height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#f6f8f7;border-radius:8px;padding:16px;font:12px/1.6 Consolas,monospace}
 @media(max-width:680px){header>div{padding:18px 20px}main{padding:24px 16px}.grid,.fields{grid-template-columns:1fr}.card{padding:20px}.intro h2{font-size:23px}.actions{align-items:flex-start;flex-direction:column}.login{margin:5vh auto}.refresh{font-size:12px}.brand{gap:9px}h1{font-size:18px}.stats{gap:10px 12px}}
 </style>
 </head>
@@ -41,6 +42,10 @@ header{background:#fff;border-bottom:1px solid #dce6e2}header>div{max-width:1080
 <form id="storage-format-form" style="margin-top:24px"><fieldset><legend>格式化磁盘</legend><p class="error">将清空当前 USB 磁盘的全部分区和文件，创建一个 FAT32 分区，无法撤销。</p><label for="storage-confirm">输入 FORMAT 确认清空上方显示的磁盘</label><input id="storage-confirm" autocomplete="off" placeholder="FORMAT" maxlength="6"><div class="actions"><button id="storage-format" class="secondary" type="submit">清空并格式化为 FAT32</button></div></fieldset></form>
 <p id="storage-error" class="error" role="alert" hidden></p><p id="storage-progress" class="hint" role="status"></p>
 </section>
+<details id="logs-panel" class="card devices"><summary>系统日志</summary>
+<p class="hint">展开后每 5 秒更新。保留最近 24 小时、最多 2048 条，容量满时覆盖最旧记录；重启后清空。每条最多约 1 KiB，超长内容标记为截断。</p>
+<pre id="logs-content" class="log-output" tabindex="0" aria-label="应用日志"></pre><p id="logs-error" class="error" role="alert" hidden></p>
+</details>
 <section id="settings" class="card" aria-labelledby="settings-title"><h2 id="settings-title">网络设置</h2><form id="config-form">
 <fieldset><legend>Wi-Fi</legend><div class="fields"><div><label for="ssid">网络名称（SSID）</label><input id="ssid" name="ssid" required maxlength="32" autocomplete="off"><p class="hint">最多 32 个 UTF-8 字节。</p></div><div><label for="password">新的 Wi-Fi 密码</label><input id="password" name="password" type="password" maxlength="63" autocomplete="new-password" placeholder="留空保留当前密码"><p class="hint">8–63 字节；修改后需要重新连接。</p></div></div></fieldset>
 <fieldset><legend>AP 内网</legend><div class="fields"><div><label for="gateway">网关 IP 地址</label><input id="gateway" name="gateway" required inputmode="decimal" maxlength="15" placeholder="192.168.4.1" aria-describedby="gateway-hint"><p id="gateway-hint" class="hint">设置内网网段，例如 192.168.4.1。</p></div><div><label for="netmask">子网掩码</label><input id="netmask" name="netmask" required inputmode="decimal" maxlength="15" placeholder="255.255.255.0"></div><div><label for="dns">DNS 服务器</label><input id="dns" name="dns" inputmode="decimal" maxlength="15" placeholder="自动使用有线网络 DNS"><p class="hint">留空表示自动获取。</p></div></div></fieldset>
@@ -56,6 +61,7 @@ const $ = id => document.getElementById(id);
 const configKeys = ['ssid', 'password', 'gateway', 'netmask', 'dns', 'admin_password'];
 let timer, toastTimer, configLoaded = false, refreshing = null, rebooting = false, authVersion = 0;
 let storageLoaded = false, storageState = null, storageSubmitting = false, storagePending = false;
+let logCursor = 0, logEntries = [], logsRefreshing = null;
 function message(id, text) { $(id).textContent = text; $(id).hidden = !text; }
 function toast(text) { message('toast', text); clearTimeout(toastTimer); toastTimer = setTimeout(() => message('toast', ''), 5000); }
 async function request(path, body) {
@@ -72,7 +78,33 @@ function loginView() {
   $('login-panel').hidden = false; $('dashboard').hidden = true; $('logout').hidden = true;
   $('login-password').value = ''; $('password').value = ''; $('admin_password').value = '';
   $('smb-password').value = ''; $('storage-confirm').value = '';
+  logCursor = 0; logEntries = []; $('logs-content').textContent = ''; $('logs-panel').open = false;
+  message('logs-error', '');
 }
+async function refreshLogs() {
+  const version = authVersion;
+  if (logsRefreshing === version || rebooting || $('dashboard').hidden || !$('logs-panel').open) return;
+  logsRefreshing = version;
+  try {
+    let more;
+    do {
+      const data = await request('/api/logs?after=' + logCursor);
+      if (version !== authVersion) return;
+      const output = $('logs-content');
+      const follow = !logEntries.length || output.scrollTop + output.clientHeight >= output.scrollHeight - 24;
+      if (data.reset) logEntries = [];
+      logEntries = logEntries.filter(entry => entry.id >= data.first).concat(data.entries);
+      logCursor = data.next; more = data.more;
+      output.textContent = logEntries.map(entry => entry.text).join('').replace(/\x1b\[[0-9;]*m/g, '') || '暂无应用日志';
+      if (follow) output.scrollTop = output.scrollHeight;
+      message('logs-error', '');
+    } while (more && $('logs-panel').open);
+  } catch (error) {
+    if (version !== authVersion) return;
+    if (error.status === 401) loginView(); else message('logs-error', error.message);
+  } finally { if (logsRefreshing === version) logsRefreshing = null; }
+}
+$('logs-panel').addEventListener('toggle', refreshLogs);
 function duration(seconds) {
   if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return '暂不可用';
   const n = Math.floor(seconds), days = Math.floor(n / 86400), hours = Math.floor(n / 3600) % 24, minutes = Math.floor(n / 60) % 60;
@@ -171,6 +203,7 @@ async function refresh() {
     render(data); $('login-panel').hidden = true; $('dashboard').hidden = false; $('logout').hidden = false;
     $('refresh-state').textContent = '每 5 秒自动更新';
     if (!timer) timer = setInterval(refresh, 5000);
+    refreshLogs();
   } catch (error) {
     if (version !== authVersion) return;
     if (error.status === 401) loginView();
@@ -202,6 +235,7 @@ $('config-form').addEventListener('submit', async event => {
     const data = await request('/api/config', body);
     rebooting = true; authVersion++; clearInterval(timer); $('settings').hidden = true; $('logout').hidden = true;
     $('storage-panel').hidden = true; $('smb-password').value = ''; $('storage-confirm').value = '';
+    $('logs-panel').open = false; $('logs-panel').hidden = true;
     $('refresh-state').textContent = '等待路由器重启，请重新连接 Wi-Fi';
     $('new-ssid').textContent = body.ssid;
     const url = 'http://' + data.gateway + '/'; $('new-url').textContent = url; $('new-url').setAttribute('href', url);
