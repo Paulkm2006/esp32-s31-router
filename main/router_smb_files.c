@@ -151,3 +151,167 @@ static int create_file(struct smb2_server *server, struct smb2_context *smb,
     rep->allocation_size = (rep->end_of_file + 4095) & ~4095ULL;
     return 0;
 }
+
+static FRESULT close_file(router_smb_file_t *file)
+{
+    FRESULT result = file->directory ? f_closedir(&file->dir) : f_close(&file->file);
+    if (result == FR_OK) {
+        file->used = false;
+        if (file->delete_pending) result = f_unlink(file->path);
+    }
+    return result;
+}
+
+FRESULT router_smb_cleanup(router_smb_client_t *client)
+{
+    FRESULT result = FR_OK;
+    for (unsigned i = 0; i < ROUTER_SMB_HANDLES; ++i) {
+        if (!client->files[i].used) continue;
+        FRESULT err = close_file(&client->files[i]);
+        if (err != FR_OK) result = err;
+    }
+    client->last = NULL;
+    client->tree = false;
+    client->used = result != FR_OK;
+    return result;
+}
+
+static int close_command(struct smb2_server *s, struct smb2_context *smb,
+                         struct smb2_close_request *req, struct smb2_close_reply *rep)
+{
+    (void)s; (void)rep;
+    router_smb_file_t *f = router_smb_file(smb, req->file_id);
+    return f ? router_smb_result(smb, SMB2_CLOSE, close_file(f)) :
+               router_smb_error(smb, SMB2_CLOSE, SMB2_STATUS_FILE_CLOSED);
+}
+
+static int flush_command(struct smb2_server *s, struct smb2_context *smb, struct smb2_flush_request *req)
+{
+    (void)s;
+    router_smb_file_t *f = router_smb_file(smb, req->file_id);
+    if (!f) return router_smb_error(smb, SMB2_FLUSH, SMB2_STATUS_FILE_CLOSED);
+    return f->directory ? 0 : router_smb_result(smb, SMB2_FLUSH, f_sync(&f->file));
+}
+
+static FRESULT extend_file(FIL *file, FSIZE_t size)
+{
+    if (size <= f_size(file)) return f_lseek(file, size);
+    FRESULT result = f_lseek(file, f_size(file));
+    static const uint8_t zeros[512];
+    while (result == FR_OK && f_tell(file) < size) {
+        UINT count, n = size - f_tell(file) > sizeof(zeros) ? sizeof(zeros) : size - f_tell(file);
+        result = f_write(file, zeros, n, &count);
+        if (result == FR_OK && count != n) return FR_DENIED;
+    }
+    return result;
+}
+
+static int read_command(struct smb2_server *s, struct smb2_context *smb,
+                        struct smb2_read_request *req, struct smb2_read_reply *rep)
+{
+    (void)s;
+    router_smb_file_t *f = router_smb_file(smb, req->file_id);
+    if (!f) return router_smb_error(smb, SMB2_READ, SMB2_STATUS_FILE_CLOSED);
+    if (f->directory || !f->readable) return router_smb_error(smb, SMB2_READ, SMB2_STATUS_ACCESS_DENIED);
+    if (req->length > ROUTER_SMB_BUFFER) return router_smb_error(smb, SMB2_READ, SMB2_STATUS_INVALID_PARAMETER);
+    if (req->offset >= f_size(&f->file)) return router_smb_error(smb, SMB2_READ, SMB2_STATUS_END_OF_FILE);
+    uint8_t *data = malloc(req->length ? req->length : 1);
+    if (!data) return router_smb_error(smb, SMB2_READ, SMB2_STATUS_INSUFFICIENT_RESOURCES);
+    FRESULT result = f_lseek(&f->file, (FSIZE_t)req->offset);
+    UINT count = 0;
+    if (result == FR_OK) result = f_read(&f->file, data, req->length, &count);
+    if (result != FR_OK) { free(data); return router_smb_result(smb, SMB2_READ, result); }
+    rep->data = data; // libsmb2 owns the read buffer after encoding the reply.
+    rep->data_length = count;
+    return 0;
+}
+
+static int write_command(struct smb2_server *s, struct smb2_context *smb,
+                         struct smb2_write_request *req, struct smb2_write_reply *rep)
+{
+    (void)s;
+    router_smb_file_t *f = router_smb_file(smb, req->file_id);
+    if (!f) return router_smb_error(smb, SMB2_WRITE, SMB2_STATUS_FILE_CLOSED);
+    if (f->directory || !f->writable) return router_smb_error(smb, SMB2_WRITE, SMB2_STATUS_ACCESS_DENIED);
+    if (req->length > ROUTER_SMB_BUFFER || req->offset > UINT32_MAX || req->length > UINT32_MAX - req->offset)
+        return router_smb_error(smb, SMB2_WRITE, SMB2_STATUS_FILE_TOO_LARGE);
+    FRESULT result = extend_file(&f->file, (FSIZE_t)req->offset);
+    UINT count = 0;
+    if (result == FR_OK) result = f_write(&f->file, req->buf, req->length, &count);
+    if (result == FR_OK && (req->flags & 1)) result = f_sync(&f->file);
+    if (result != FR_OK) return router_smb_result(smb, SMB2_WRITE, result);
+    if (count < req->length) return router_smb_error(smb, SMB2_WRITE, SMB2_STATUS_DISK_FULL);
+    rep->count = count;
+    return 0;
+}
+
+static int set_info(struct smb2_server *s, struct smb2_context *smb, struct smb2_set_info_request *req)
+{
+    (void)s;
+    router_smb_file_t *f = router_smb_file(smb, req->file_id);
+    if (!f) return router_smb_error(smb, SMB2_SET_INFO, SMB2_STATUS_FILE_CLOSED);
+    const uint8_t *p = req->input_data;
+    if (req->info_type != SMB2_0_INFO_FILE) return router_smb_error(smb, SMB2_SET_INFO, SMB2_STATUS_NOT_SUPPORTED);
+    FRESULT result = FR_OK;
+    if (req->file_info_class == SMB2_FILE_DISPOSITION_INFORMATION && req->buffer_length >= 1) {
+        if (!(f->access & 4) || !strcmp(f->path, ROUTER_DISK "/")) result = FR_DENIED;
+        else f->delete_pending = p[0] != 0;
+    } else if ((req->file_info_class == SMB2_FILE_END_OF_FILE_INFORMATION ||
+                req->file_info_class == SMB2_FILE_ALLOCATION_INFORMATION) && req->buffer_length >= 8) {
+        uint64_t size = router_smb_get(p, 8);
+        if (f->directory || !f->writable) result = FR_DENIED;
+        else if (size > UINT32_MAX) return router_smb_error(smb, SMB2_SET_INFO, SMB2_STATUS_FILE_TOO_LARGE);
+        else if (req->file_info_class == SMB2_FILE_END_OF_FILE_INFORMATION || size < f_size(&f->file)) {
+            result = extend_file(&f->file, size);
+            if (result == FR_OK) result = f_truncate(&f->file);
+            if (result == FR_OK) result = f_sync(&f->file);
+        }
+    } else if (req->file_info_class == SMB2_FILE_BASIC_INFORMATION && req->buffer_length >= 40) {
+        uint64_t raw = router_smb_get(p + 16, 8);
+        if (raw && raw != UINT64_MAX) {
+            struct smb2_timeval t;
+            smb2_win_to_timeval(raw, &t);
+            time_t seconds = t.tv_sec;
+            struct tm tm;
+            if (!localtime_r(&seconds, &tm) || tm.tm_year < 80 || tm.tm_year > 207) result = FR_INVALID_PARAMETER;
+            else {
+                FILINFO info = {.fdate = ((tm.tm_year - 80) << 9) | ((tm.tm_mon + 1) << 5) | tm.tm_mday,
+                                .ftime = (tm.tm_hour << 11) | (tm.tm_min << 5) | tm.tm_sec / 2};
+                result = f_utime(f->path, &info);
+            }
+        }
+    } else if (req->file_info_class == SMB2_FILE_RENAME_INFORMATION && req->buffer_length >= 20) {
+        uint32_t bytes = router_smb_get(p + 16, 4);
+        if (!(f->access & 4) || (bytes & 1) || bytes > req->buffer_length - 20 || router_smb_get(p + 8, 8)) result = FR_DENIED;
+        else {
+            const char *name = smb2_utf16_to_utf8((const uint16_t *)(p + 20), bytes / 2);
+            char path[ROUTER_SMB_PATH];
+            bool valid = name && router_smb_path(name, path, sizeof(path));
+            free((void *)name);
+            if (!valid || !strcmp(f->path, ROUTER_DISK "/")) result = FR_INVALID_NAME;
+            else if (strcasecmp(path, f->path) && share_conflict(f->path, 7, 0)) {
+                // FatFs cannot rename an open object; close this handle first.
+                bool pending = f->delete_pending;
+                f->delete_pending = false;
+                result = close_file(f);
+                if (result == FR_OK) result = f_rename(f->path, path);
+                if (result == FR_OK) strcpy(f->path, path);
+                FRESULT reopened = f->directory ? f_opendir(&f->dir, f->path) : f_open(&f->file, f->path, FA_READ | (f->writable ? FA_WRITE : 0));
+                f->used = reopened == FR_OK;
+                f->delete_pending = pending;
+                if (result == FR_OK) result = reopened;
+            }
+        }
+    } else return router_smb_error(smb, SMB2_SET_INFO, SMB2_STATUS_INVALID_INFO_CLASS);
+    return router_smb_result(smb, SMB2_SET_INFO, result);
+}
+
+void router_smb_file_handlers(struct smb2_server_request_handlers *handlers)
+{
+    handlers->create_cmd = create_file;
+    handlers->close_cmd = close_command;
+    handlers->flush_cmd = flush_command;
+    handlers->read_cmd = read_command;
+    handlers->write_cmd = write_command;
+    handlers->set_info_cmd = set_info;
+}
