@@ -77,53 +77,8 @@ function loginView() {
   logCursor = 0; logEntries = []; $('logs-content').textContent = ''; $('logs-panel').open = false;
   message('logs-error', '');
 }
-async function refreshLogs() {
-  const version = authVersion;
-  if (logsRefreshing === version || rebooting || $('dashboard').hidden || !$('logs-panel').open) return;
-  logsRefreshing = version;
-  try {
-    let more;
-    do {
-      const data = await request('/api/logs?after=' + logCursor);
-      if (version !== authVersion) return;
-      const output = $('logs-content');
-      const follow = !logEntries.length || output.scrollTop + output.clientHeight >= output.scrollHeight - 24;
-      if (data.reset) logEntries = [];
-      logEntries = logEntries.filter(entry => entry.id >= data.first).concat(data.entries);
-      logCursor = data.next; more = data.more;
-      output.textContent = logEntries.map(entry => entry.text).join('').replace(/\x1b\[[0-9;]*m/g, '') || '暂无应用日志';
-      if (follow) output.scrollTop = output.scrollHeight;
-      message('logs-error', '');
-    } while (more && $('logs-panel').open);
-  } catch (error) {
-    if (version !== authVersion) return;
-    if (error.status === 401) loginView(); else message('logs-error', error.message);
-  } finally { if (logsRefreshing === version) logsRefreshing = null; }
-}
-$('logs-panel').addEventListener('toggle', refreshLogs);
-function duration(seconds) {
-  if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return '暂不可用';
-  const n = Math.floor(seconds), days = Math.floor(n / 86400), hours = Math.floor(n / 3600) % 24, minutes = Math.floor(n / 60) % 60;
-  return (days ? days + ' 天 ' : '') + (hours ? hours + ' 小时 ' : '') + (minutes ? minutes + ' 分 ' : '') + n % 60 + ' 秒';
-}
-function render(data) {
-  const {wan, ap, clients, config} = data;
-  const values = {'wan-ip':wan.ip, 'wan-mask':wan.netmask, 'wan-gateway':wan.gateway, 'wan-dns':wan.dns, 'wan-mac':wan.mac, 'ap-ssid':config.ssid, 'ap-ip':ap.ip, 'ap-mask':ap.netmask, 'ap-dns':ap.dns};
-  for (const [id, value] of Object.entries(values)) $(id).textContent = value || '暂不可用';
-  $('wan-state').textContent = wan.ready ? '已获取 IP' : wan.link ? '网线已连接 · 等待 IP' : '网线未连接';
-  $('wan-state').className = 'badge' + (wan.ready ? ' good' : '');
-  $('wan-speed').textContent = wan.link && wan.speed_mbps ? wan.speed_mbps + ' Mbps · ' + (wan.full_duplex ? '全双工' : '半双工') : '—';
-  $('client-count').textContent = clients.length + ' 台';
-  $('clients').replaceChildren();
-  for (const client of clients) {
-    const row = document.createElement('tr');
-    for (const value of [client.ip || '暂未分配', client.mac || '暂不可用', duration(client.connected_seconds)]) { const cell = document.createElement('td'); cell.textContent = value; row.append(cell); }
-    $('clients').append(row);
-  }
-  if (!clients.length) { const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 3; cell.className = 'empty'; cell.textContent = '暂无设备连接'; row.append(cell); $('clients').append(row); }
-  if (!configLoaded) { for (const key of ['ssid', 'gateway', 'netmask', 'dns']) $(key).value = config[key] || ''; configLoaded = true; }
-  renderStorage(data.storage, ap.ip);
-}
+@UI_logs_js@
+@UI_network_js@
 @UI_storage_js@
 async function refresh() {
   if (refreshing === authVersion || rebooting) return;
@@ -155,27 +110,8 @@ $('logout').addEventListener('click', async () => {
   catch (error) { if (error.status === 401) loginView(); else toast(error.message); }
   finally { $('logout').disabled = false; }
 });
-$('config-form').addEventListener('submit', async event => {
-  event.preventDefault(); message('config-error', '');
-  const body = Object.fromEntries(configKeys.map(key => [key, $(key).value]));
-  for (const key of ['ssid', 'password', 'admin_password']) {
-    const size = new TextEncoder().encode(body[key]).length, max = key === 'ssid' ? 32 : 63;
-    if (size > max || (key !== 'ssid' && size > 0 && size < 8)) { message('config-error', key === 'ssid' ? '网络名称不能超过 32 个 UTF-8 字节。' : '密码必须为 8–63 个 UTF-8 字节。'); return; }
-  }
-  $('save').disabled = true;
-  try {
-    const data = await request('/api/config', body);
-    rebooting = true; authVersion++; clearInterval(timer); $('settings').hidden = true; $('logout').hidden = true;
-    $('storage-panel').hidden = true; $('smb-password').value = ''; $('storage-confirm').value = '';
-    $('logs-panel').open = false; $('logs-panel').hidden = true;
-    $('refresh-state').textContent = '等待路由器重启，请重新连接 Wi-Fi';
-    $('new-ssid').textContent = body.ssid;
-    const url = 'http://' + data.gateway + '/'; $('new-url').textContent = url; $('new-url').setAttribute('href', url);
-    $('reconnect').hidden = false; $('password').value = ''; $('admin_password').value = '';
-    $('reconnect').scrollIntoView({behavior:'smooth', block:'start'});
-  } catch (error) { if (error.status === 401) { loginView(); message('login-error', '登录已过期，请重新登录。'); } else message('config-error', error.message); }
-  finally { $('save').disabled = false; }
-});
+@UI_settings_js@
+
 refresh();
 </script>
 </body>

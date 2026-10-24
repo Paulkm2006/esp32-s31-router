@@ -1,5 +1,5 @@
 if(NOT CMAKE_BUILD_EARLY_EXPANSION)
-    set(web_assets style.css storage.js)
+    set(web_assets style.css storage.js logs.js network.js settings.js)
     foreach(asset IN LISTS web_assets)
         set(asset_path "${CMAKE_CURRENT_LIST_DIR}/web/ui/${asset}")
         string(MAKE_C_IDENTIFIER "${asset}" asset_id)
