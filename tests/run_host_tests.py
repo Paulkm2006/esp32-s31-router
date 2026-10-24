@@ -36,18 +36,20 @@ def main() -> None:
                 IDF / "components/nvs_flash/include", ROOT / "build/config"]
     tests = {"subnet": [ROOT / "tests/test_subnet.c"],
              "config": [ROOT / "tests/test_config.c", ROOT / "main/router_config.c"],
-             "auth": [ROOT / "tests/test_auth.c", ROOT / "main/router_auth.c"]}
+             "auth": [ROOT / "tests/test_auth.c", ROOT / "main/router_auth.c"],
+             "ipv6": [ROOT / "tests/test_ipv6.c", ROOT / "main/router_ipv6.c"]}
     with tempfile.TemporaryDirectory(prefix="router-host-tests-") as temp:
         for name, sources in tests.items():
+            test_includes = ([ROOT / "tests/host/ipv6"] if name == "ipv6" else []) + includes
             output = Path(temp) / (name + (".exe" if os.name == "nt" else ""))
             if msvc:
                 args = ["/nologo", "/std:c17", "/W4", "/WX", "/MT", "/D_CRT_SECURE_NO_WARNINGS",
                         f"/FI{ROOT / 'tests/host/compiler.h'}", f"/Fe:{output}",
-                        *[f"/I{path}" for path in includes]]
+                        *[f"/I{path}" for path in test_includes]]
             else:
                 args = ["-std=c17", "-Wall", "-Wextra", "-Werror", "-D_POSIX_C_SOURCE=200809L",
                         "-include", str(ROOT / "tests/host/compiler.h"),
-                        "-o", str(output), *[f"-I{path}" for path in includes]]
+                        "-o", str(output), *[f"-I{path}" for path in test_includes]]
             subprocess.run([compiler, *args, *map(str, sources)], env=env, cwd=temp, check=True)
             subprocess.run([str(output)], cwd=temp, check=True)
             print(f"{name}: passed", flush=True)
