@@ -9,7 +9,8 @@
 #include "smb2/libsmb2-raw.h"
 
 #define ROUTER_SMB_HANDLES 8
-#define ROUTER_SMB_BUFFER 32768
+#define ROUTER_SMB_BUFFER 65536
+_Static_assert(ROUTER_SMB_BUFFER >= 65536, "Windows rejects smaller SMB negotiate limits");
 #define ROUTER_SMB_PATH 1024
 #define ROUTER_SMB_FILE_TOO_LARGE 0xc0000904U
 typedef struct {

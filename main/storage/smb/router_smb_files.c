@@ -99,6 +99,7 @@ static int create_file(struct smb2_server *server, struct smb2_context *smb,
 {
     (void)server;
     router_smb_client_t *client = smb2_get_opaque(smb);
+    if (client) client->last = NULL;
     router_smb_file_t *file = NULL;
     if (!client || !client->tree) return router_smb_error(smb, SMB2_CREATE, SMB2_STATUS_ACCESS_DENIED);
     for (unsigned i = 0; i < ROUTER_SMB_HANDLES; ++i) if (!client->files[i].used) { file = &client->files[i]; break; }

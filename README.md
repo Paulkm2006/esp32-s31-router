@@ -133,7 +133,7 @@ menuconfig 中同步开启 PSRAM、选择自定义分区表 partitions.csv，并
 
 存储支持一个 USB MSC 设备、一个 FAT32 卷，SMB 服务仅在 Wi-Fi AP 接口提供。
 它接受 SMB3 协议，要求账号认证与签名，不提供匿名访问或 SMB1/SMB2 降级。
-最多两个 SMB 连接，每个连接最多八个文件或目录句柄，读写块最大 32 KiB。
+最多两个 SMB 连接，每个连接最多八个文件或目录句柄，读写块最大 64 KiB。
 SMB 缓冲与句柄放在 PSRAM 中；未检测到 PSRAM 时存储服务无法启动。
 
 登录管理页面后，在“USB 网络存储”中操作：
@@ -158,6 +158,8 @@ Windows：连接热点后，将页面显示的地址（例如 `\\192.168.4.1\usb
 或使用“映射网络驱动器”，输入刚设置的 SMB 用户名和密码。更换账号后需要断开原共享连接，
 并更新 Windows 保存的凭据。服务不提供共享自动发现，请直接使用页面显示的共享路径。
 
+    net use Z: \\192.168.4.1\usb * /user:router
+
 Linux：安装发行版的 cifs-utils，创建挂载目录后执行，例如：
 
     sudo mount -t cifs //192.168.4.1/usb /mnt/esp32 -o username=router,vers=3.1.1,sec=ntlmssp,sign,noserverino
@@ -179,8 +181,17 @@ Linux 环境中先准备 Python 虚拟环境并安装 smbprotocol 1.17.0，然�
 
 测试在端口 1445 启动临时服务，复用生产认证、文件处理和磁盘生命周期代码；仅替代 USB 块设备，
 使用临时 64 MiB 磁盘镜像和真实 FatFs。覆盖错误密码、SMB3 签名、SMB2 拒绝、长中文文件名、
-读写、零填充、截断、重命名、分页枚举及删除，同时验证挂载失败不擦盘、同步失败不卸载。
-它不替代实板 USB 热插拔、Windows 文件资源管理器、Linux 内核 CIFS 挂载或并发路由性能验收。
+64 KiB 读写、零填充、截断、失败的复合 CREATE/CLOSE 不误关其他句柄、重命名、分页枚举及删除，
+同时验证挂载失败不擦盘、同步失败不卸载，以及 SPNEGO MIC 的双向签名、篡改和截断拒绝。
+
+Windows 原生客户端测试：在 WSL 中单独运行 `.cache/smb-host/router_smb_host`，
+再在 Windows 11 24H2 或更新版本的 PowerShell 7 中执行：
+
+    ./tests/test_smb_windows.ps1
+
+脚本仅连接 localhost:1445 的临时磁盘，用公开测试账号挂载临时 Y: 盘，验证 256 KiB 写入和
+SHA-256 回读校验、中文文件名、重命名、列目录及删除，最后移除映射；Y: 已占用时拒绝运行。
+上述测试不替代实板 USB 热插拔、Windows 文件资源管理器、Linux 内核 CIFS 挂载或并发路由性能验收。
 
 内存检查可在配置命令中追加
 `-DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"`，重建后运行：
@@ -188,7 +199,8 @@ Linux 环境中先准备 Python 虚拟环境并安装 smbprotocol 1.17.0，然�
     ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 python tests/run_smb_tests.py
 
 libsmb2 以固定版本 Git 子模块保存。components/smb3/patch_sources.cmake 在构建目录生成修复后的源码，
-修复自定义响应导致的请求生命周期问题、CREATE 名称泄漏、空密钥派生和未对齐 UTF-16 读取；
+修复自定义响应导致的请求生命周期问题、CREATE 名称泄漏、空密钥派生、未对齐 UTF-16 读取和
+Windows 原生认证所需的 SPNEGO mechListMIC 校验与应答；
 宿主和固件使用同一份修复，不修改第三方检出。更新子模块时需要复跑上述内存检查。
 
 ## IPv6 透传
