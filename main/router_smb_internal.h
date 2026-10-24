@@ -39,3 +39,4 @@ void router_smb_info_handlers(struct smb2_server_request_handlers *handlers);
 void router_smb_dir_handlers(struct smb2_server_request_handlers *handlers);
 uint64_t router_smb_get(const void *data, unsigned bytes);
 void router_smb_put(void *data, uint64_t value, unsigned bytes);
+uint64_t router_smb_timestamp(const FILINFO *info);

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 #include "router_disk.h"
 #include "router_smb_internal.h"
 
@@ -82,11 +83,11 @@ FRESULT router_smb_stat(router_smb_file_t *file, FILINFO *info)
     return result;
 }
 
-static bool share_conflict(const char *path, uint32_t access, uint32_t sharing)
+static bool share_conflict(const char *path, uint32_t access, uint32_t sharing, const router_smb_file_t *skip)
 {
     for (unsigned c = 0; c < 2; ++c) for (unsigned i = 0; i < ROUTER_SMB_HANDLES; ++i) {
         router_smb_file_t *f = &router_smb_clients[c].files[i];
-        if (!f->used || strcasecmp(f->path, path)) continue;
+        if (f == skip || !f->used || strcasecmp(f->path, path)) continue;
         if (f->delete_pending || (access & ~f->sharing) || (f->access & ~sharing)) return true;
     }
     return false;
@@ -109,7 +110,7 @@ static int create_file(struct smb2_server *server, struct smb2_context *smb,
     file->access = (file->readable ? 1 : 0) | (file->writable ? 2 : 0) |
                    ((req->desired_access & 0x10010000U) ? 4 : 0);
     file->sharing = req->share_access & 7;
-    if (share_conflict(file->path, file->access, file->sharing))
+    if (share_conflict(file->path, file->access, file->sharing, NULL))
         return router_smb_error(smb, SMB2_CREATE, SMB2_STATUS_SHARING_VIOLATION);
     FILINFO info = {.fattrib = AM_DIR};
     FRESULT result = !strcmp(file->path, ROUTER_DISK "/") ? FR_OK : f_stat(file->path, &info);
@@ -289,7 +290,8 @@ static int set_info(struct smb2_server *s, struct smb2_context *smb, struct smb2
             bool valid = name && router_smb_path(name, path, sizeof(path));
             free((void *)name);
             if (!valid || !strcmp(f->path, ROUTER_DISK "/")) result = FR_INVALID_NAME;
-            else if (strcasecmp(path, f->path) && share_conflict(f->path, 7, 0)) {
+            else if (share_conflict(f->path, 7, 0, f) || share_conflict(path, 7, 0, f)) result = FR_LOCKED;
+            else if (strcasecmp(path, f->path)) {
                 // FatFs cannot rename an open object; close this handle first.
                 bool pending = f->delete_pending;
                 f->delete_pending = false;
